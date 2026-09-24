@@ -8,6 +8,11 @@ interface StoreData {
   defaultModel?: string;
 }
 
+export interface SessionStoreOptions {
+  now?: () => number;
+  uuid?: () => string;
+}
+
 /**
  * SessionStore — persists sessions to Obsidian plugin data.
  *
@@ -19,6 +24,13 @@ export class SessionStore {
     currentSessionId: null,
     sessions: {},
   };
+  private readonly now: () => number;
+  private readonly uuid: () => string;
+
+  constructor(options: SessionStoreOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.uuid = options.uuid ?? (() => crypto.randomUUID());
+  }
 
   /** Call once on plugin load. */
   async load(rawData: Record<string, unknown> | null): Promise<void> {
@@ -55,12 +67,13 @@ export class SessionStore {
   // ── Session CRUD ─────────────────────────────────────────────────────────
 
   createSession(model?: string): ChatSession {
+    const now = this.now();
     const session: ChatSession = {
-      id: crypto.randomUUID(),
+      id: this.uuid(),
       model,
       messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     };
     this.data.sessions[session.id] = session;
     this.data.currentSessionId = session.id;
@@ -77,7 +90,7 @@ export class SessionStore {
   }
 
   updateSession(session: ChatSession): void {
-    session.updatedAt = Date.now();
+    session.updatedAt = this.now();
     this.data.sessions[session.id] = session;
   }
 
