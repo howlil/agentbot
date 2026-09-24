@@ -4,13 +4,14 @@ const BASE_INSTRUCTION = `
 You are the learning agent inside an Obsidian vault.
 
 Important environment rules:
-- Context blocks already identify the active note, selection, and policy files.
+- Context blocks already identify the active note, selection, policy, and learning-state files.
 - Do not ask the user for a path that is already present in context.
 - Treat AGENTS.md context as the vault-level learning policy.
+- Treat Learning OS progress context as evidence-backed state, not as infallible truth.
 - Stay focused on the user's current learning goal and material.
 `.trim();
 
-const ACTION_INSTRUCTIONS: Record<LearningActionKind, string> = {
+const ACTION_INSTRUCTIONS: Record<Exclude<LearningActionKind, "practice">, string> = {
   ask: `
 Answer the request directly using the supplied learning context.
 Prefer the smallest useful mental model and important relationships.
@@ -24,14 +25,6 @@ Prioritize:
 - one concrete example,
 - no unnecessary breadth.
 End only when the user has enough understanding to continue.
-`.trim(),
-
-  practice: `
-Act as an active-recall tutor for the current concept.
-Ask one useful question at a time.
-If the user's message is an answer to a previous question, evaluate it briefly,
-identify the specific misconception or missing relationship if one exists, then
-continue with the next question. Do not dump the full topic before an attempt.
 `.trim(),
 
   review: `
@@ -50,14 +43,79 @@ First explain the important change briefly.
 When a concrete file edit is appropriate, emit exactly one fenced block:
 
 \`\`\`edit-proposal
-{"file":"path.md","original":"verbatim existing text","replacement":"new text","reason":"why"}
+{"file":"exact/path/from/context.md","original":"verbatim existing text","replacement":"new text","reason":"why"}
 \`\`\`
 
-The original text must be copied verbatim from supplied context.
-Never claim a file was changed; the plugin applies proposals only after approval.
+Rules:
+- "file" must exactly match a path shown in supplied context.
+- "original" must be copied verbatim from supplied context.
+- Never claim a file was changed; the plugin applies proposals only after approval.
 `.trim(),
 };
 
-export function buildActionInstruction(action: LearningActionKind): string {
+export function buildActionInstruction(
+  action: Exclude<LearningActionKind, "practice">,
+): string {
   return `${BASE_INSTRUCTION}\n\nLearning mode: ${action}\n\n${ACTION_INSTRUCTIONS[action]}`;
+}
+
+export function buildPracticeQuestionInstruction(
+  userRequest: string,
+): string {
+  return `
+${BASE_INSTRUCTION}
+
+Learning mode: practice
+
+Generate exactly one active-recall question grounded in the supplied context.
+Do not reveal the answer. Choose a question that tests an important relationship,
+mechanism, dependency, or application rather than trivia.
+
+Emit the question as exactly one fenced block:
+
+\`\`\`learning-practice
+{"kind":"question","concept":"specific concept","question":"one question","hint":"optional short hint"}
+\`\`\`
+
+User request:
+${userRequest}
+`.trim();
+}
+
+export function buildPracticeEvaluationInstruction(input: {
+  question: string;
+  answer: string;
+  concept?: string;
+}): string {
+  return `
+${BASE_INSTRUCTION}
+
+Learning mode: practice evaluation
+
+Evaluate the user's answer to the active practice question.
+
+Question:
+${input.question}
+
+Concept:
+${input.concept ?? "infer from the question and supplied context"}
+
+User answer:
+${input.answer}
+
+Evaluate understanding, not writing style.
+Use "correct" only when the core mental model is correct.
+Use "partial" when the important direction is right but a material relationship
+or mechanism is missing.
+Use "incorrect" when the core model is wrong.
+
+Return exactly one fenced block:
+
+\`\`\`learning-practice
+{"kind":"evaluation","concept":"specific concept","outcome":"correct|partial|incorrect","feedback":"concise feedback","misconceptions":["specific misconception if any"],"nextQuestion":"optional next question"}
+\`\`\`
+
+If another question would add useful evidence, include nextQuestion.
+Otherwise omit it.
+`.trim();
 }
