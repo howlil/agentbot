@@ -1,5 +1,5 @@
 import { AgentContext } from "../types";
-import { ObsidianContext } from "./ObsidianContext";
+import type { ObsidianContext } from "./ObsidianContext";
 import {
   ContextDocument,
   ExplicitContextRef,
