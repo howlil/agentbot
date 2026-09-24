@@ -1,60 +1,62 @@
-// ─── All shared types — spikes 1-6 ───────────────────────────────────────────
+// Shared transport/session types.
 
-// ── Context (Spike 2) ───────────────────────────────────────────────────────
+// ── Context ─────────────────────────────────────────────────────────────────
 
 export type AgentContext =
   | { type: "selection"; file: string; content: string }
-  | { type: "note";      file: string; content: string };
+  | { type: "note"; file: string; content: string };
 
 export interface AgentInput {
   prompt: string;
   context: AgentContext[];
 }
 
-// ── AGY stream-json protocol (Spike 1) ─────────────────────────────────────
-// AGY CLI: agy --input-format stream-json --output-format stream-json [flags]
-// stdin:  one NDJSON line per turn: { role: "user", content: string }
-// stdout: NDJSON stream — one event per line
+// ── AGY transport ───────────────────────────────────────────────────────────
 
-/** What we write to AGY stdin (one JSON line per turn). */
 export interface AgyTurnInput {
   role: "user";
-  content: string;      // formatted prompt + context
+  content: string;
 }
 
-/** Events read from AGY stdout. */
 export type AgyStreamEvent =
-  | { type: "text";     content: string }
-  | { type: "done";     conversationId?: string }
-  | { type: "error";    error: string };
+  | { type: "text"; content: string }
+  | { type: "done"; conversationId?: string }
+  | { type: "error"; error: string };
 
-// ── Edit proposal (Spike 3) ─────────────────────────────────────────────────
+// ── Mutation proposal ───────────────────────────────────────────────────────
 
 export interface EditProposal {
   file: string;
-  original: string;     // verbatim text — must exist in file at Apply time
+  original: string;
   replacement: string;
   reason?: string;
 }
 
-// ── Apply result (Spike 4) ──────────────────────────────────────────────────
-
 export type ApplyResult =
   | { ok: true }
-  | { ok: false; reason: "stale" | "no-editor" | "error"; message: string };
+  | {
+      ok: false;
+      reason:
+        | "stale"
+        | "ambiguous"
+        | "missing-file"
+        | "no-editor"
+        | "error";
+      message: string;
+    };
 
-// ── Session (Spike 5) ───────────────────────────────────────────────────────
+// ── Session ─────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {
   role: "user" | "assistant";
-  content: string;        // raw markdown text
+  content: string;
   proposal?: EditProposal;
   proposalState?: "pending" | "applied" | "rejected" | "stale";
 }
 
 export interface ChatSession {
   id: string;
-  conversationId?: string; // AGY conversation ID for --conversation flag
+  conversationId?: string;
   model: string;
   messages: ChatMessage[];
   createdAt: number;
@@ -66,20 +68,22 @@ export interface AgyModel {
   name: string;
 }
 
-// ── Adapter interface ────────────────────────────────────────────────────────
+// ── Agent runtime boundary ──────────────────────────────────────────────────
 
 export interface AgentAdapter {
-  /** Resolve AGY binary path. Throws if not found. */
   ping(): Promise<string>;
-  /** Send one turn; yields text deltas and finally a done/error event. */
-  send(input: AgentInput, opts: SendOptions): AsyncIterable<AgyStreamEvent>;
-  /** List available models. */
+
+  send(
+    input: AgentInput,
+    opts: SendOptions,
+  ): AsyncIterable<AgyStreamEvent>;
+
   listModels(): Promise<AgyModel[]>;
-  /** Abort in-flight request. */
+
   abort(): void;
 }
 
 export interface SendOptions {
   model: string;
-  conversationId?: string;  // undefined = new conversation
+  conversationId?: string;
 }
