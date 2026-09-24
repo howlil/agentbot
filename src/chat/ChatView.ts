@@ -1,38 +1,38 @@
 import { ItemView, WorkspaceLeaf } from "obsidian";
-import { SessionController } from "../session/SessionController";
-import { ObsidianContext } from "../context/ObsidianContext";
-import { EditProposal, AgyModel, AgentContext } from "../types";
+import { LearningController } from "../learning/LearningController";
+import {
+  LearningActionKind,
+  LearningEvent,
+} from "../learning/learning-types";
+import { LearningContext } from "../context/context-types";
+import { AgentContext, EditProposal } from "../types";
 
 export const AGY_VIEW_TYPE = "agy-sidebar";
 
-// ─── State machine ────────────────────────────────────────────────────────────
-//
-//   EMPTY ──send──► RUNNING ──text──► ANSWER
-//                       │                │
-//                  proposal          proposal
-//                       └──────┬──────────┘
-//                              ▼
-//                         PROPOSAL
-//                          /    \
-//                      Reject  Apply
-//                        ▼       ▼
-//                     ANSWER  APPLIED
-//
-//   Any state ──agy-not-found──► ERROR
-// ─────────────────────────────────────────────────────────────────────────────
+type UIState =
+  | "EMPTY"
+  | "RUNNING"
+  | "ANSWER"
+  | "PROPOSAL"
+  | "APPLIED"
+  | "ERROR";
 
-type UIState = "EMPTY" | "RUNNING" | "ANSWER" | "PROPOSAL" | "APPLIED" | "ERROR";
+const ACTIONS: Array<{
+  kind: LearningActionKind;
+  label: string;
+}> = [
+  { kind: "ask", label: "Ask" },
+  { kind: "explain", label: "Explain" },
+  { kind: "practice", label: "Practice" },
+  { kind: "review", label: "Review" },
+  { kind: "edit", label: "Edit" },
+];
 
 export class ChatView extends ItemView {
-  private sc: SessionController;
-  private ctx: ObsidianContext;
-
-  // Root sections
   private thread!: HTMLElement;
   private composer!: HTMLElement;
   private headerEl!: HTMLElement;
 
-  // Composer refs
   private input!: HTMLTextAreaElement;
   private sendBtn!: HTMLButtonElement;
   private selectionChip!: HTMLElement;
@@ -40,31 +40,34 @@ export class ChatView extends ItemView {
   private cancelBtn!: HTMLButtonElement;
   private modelSelect!: HTMLSelectElement;
 
-  // Thread refs (reset per turn)
   private agyCursorEl: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
 
-  // State
   private uiState: UIState = "EMPTY";
+  private selectedAction: LearningActionKind = "ask";
+  private actionButtons = new Map<LearningActionKind, HTMLButtonElement>();
 
-  // Extra context chips added by user
   private extraCtx: AgentContext[] = [];
+  private currentContext: LearningContext | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
-    sc: SessionController,
-    ctx: ObsidianContext,
+    private readonly learning: LearningController,
   ) {
     super(leaf);
-    this.sc = sc;
-    this.ctx = ctx;
   }
 
-  getViewType()    { return AGY_VIEW_TYPE; }
-  getDisplayText() { return "AGY"; }
-  getIcon()        { return "sparkles"; }
+  getViewType() {
+    return AGY_VIEW_TYPE;
+  }
 
-  // ─── Lifecycle ─────────────────────────────────────────────────────────────
+  getDisplayText() {
+    return "Learning Agent";
+  }
+
+  getIcon() {
+    return "sparkles";
+  }
 
   async onOpen(): Promise<void> {
     const root = this.contentEl;
@@ -72,107 +75,156 @@ export class ChatView extends ItemView {
     root.addClass("agy-root");
 
     this.buildHeader(root);
-    this.thread   = root.createDiv({ cls: "agy-thread" });
+    this.thread = root.createDiv({ cls: "agy-thread" });
     this.composer = root.createDiv({ cls: "agy-composer" });
     this.buildComposer(this.composer);
 
-    // Verify AGY is installed at open time
     try {
-      await this.sc["adapter"]?.ping?.();
+      await this.learning.ping();
     } catch (err) {
       this.showError((err as Error).message);
       return;
     }
 
+    await this.syncChips();
     this.showEmpty();
-    this.syncChips();
 
-    // Update chips whenever selection or active file changes
     this.registerEvent(
-      this.app.workspace.on("active-leaf-change", () => this.syncChips())
+      this.app.workspace.on("active-leaf-change", () => {
+        void this.syncChips();
+      }),
     );
     this.registerEvent(
-      this.app.workspace.on("editor-selection-change" as any, () => this.syncChips())
+      this.app.workspace.on("editor-selection-change" as any, () => {
+        void this.syncChips();
+      }),
     );
 
-    // Populate model selector
-    this.refreshModelList();
+    void this.refreshModelList();
   }
 
   async onClose(): Promise<void> {
-    this.sc.destroy();
+    this.learning.cancel();
   }
-
-  // ─── Header ────────────────────────────────────────────────────────────────
 
   private buildHeader(root: HTMLElement): void {
     this.headerEl = root.createDiv({ cls: "agy-header" });
-    this.headerEl.createSpan({ cls: "agy-header-title", text: "AGY" });
+    this.headerEl.createSpan({
+      cls: "agy-header-title",
+      text: "Learning Agent",
+    });
 
     const right = this.headerEl.createDiv({ cls: "agy-header-right" });
 
-    // Model selector (Spike 5)
-    this.modelSelect = right.createEl("select", { cls: "agy-model-select" });
-    this.modelSelect.addEventListener("change", () => {
-      this.sc.setModel(this.modelSelect.value);
+    this.modelSelect = right.createEl("select", {
+      cls: "agy-model-select",
     });
-    // Add placeholder option
-    const placeholder = this.modelSelect.createEl("option", {
-      text: "Loading models…",
-      attr: { disabled: "", selected: "" },
+    this.modelSelect.addEventListener("change", () => {
+      this.learning.setModel(this.modelSelect.value);
     });
 
-    // New chat button
-    const newBtn = right.createEl("button", { cls: "agy-new-btn", text: "+" });
-    newBtn.title = "New chat";
+    this.modelSelect.createEl("option", {
+      text: "Loading models…",
+      attr: {
+        disabled: "",
+        selected: "",
+      },
+    });
+
+    const newBtn = right.createEl("button", {
+      cls: "agy-new-btn",
+      text: "+",
+    });
+    newBtn.title = "New learning session";
     newBtn.addEventListener("click", async () => {
-      await this.sc.newSession();
+      await this.learning.newSession();
       this.extraCtx = [];
+      this.selectedAction = "ask";
+      this.syncActionButtons();
+      await this.syncChips();
       this.showEmpty();
     });
   }
 
   private async refreshModelList(): Promise<void> {
-    const models = this.sc.getModels();
+    let models = this.learning.getModels();
+
     if (models.length === 0) {
-      // Models may not be loaded yet — wait a tick and try once
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      models = this.learning.getModels();
     }
-    const fresh = this.sc.getModels();
-    if (fresh.length === 0) return;
+
+    if (models.length === 0) return;
 
     this.modelSelect.empty();
-    const currentModel = this.sc.getSession().model;
-    for (const m of fresh) {
-      const opt = this.modelSelect.createEl("option", {
-        value: m.id,
-        text: m.name,
+    const currentModel = this.learning.getSession().model;
+
+    for (const model of models) {
+      const option = this.modelSelect.createEl("option", {
+        value: model.id,
+        text: model.name,
       });
-      if (m.id === currentModel) opt.selected = true;
+
+      if (model.id === currentModel) option.selected = true;
     }
   }
 
-  // ─── Composer ──────────────────────────────────────────────────────────────
-
   private buildComposer(parent: HTMLElement): void {
+    const actionRow = parent.createDiv({
+      cls: "agy-learning-actions",
+    });
+
+    for (const action of ACTIONS) {
+      const button = actionRow.createEl("button", {
+        cls: "agy-action-btn",
+        text: action.label,
+      });
+      button.type = "button";
+      button.setAttribute(
+        "aria-pressed",
+        String(action.kind === this.selectedAction),
+      );
+      button.addEventListener("click", () => {
+        this.selectedAction = action.kind;
+        this.syncActionButtons();
+        this.updatePlaceholder();
+      });
+      this.actionButtons.set(action.kind, button);
+    }
+
+    this.syncActionButtons();
+
     const chips = parent.createDiv({ cls: "agy-chips" });
 
-    this.selectionChip = chips.createSpan({ cls: "agy-chip agy-chip--hidden" });
+    this.selectionChip = chips.createSpan({
+      cls: "agy-chip agy-chip--hidden",
+    });
     this.selectionChip.createSpan({ cls: "agy-chip-dot" });
-    this.selectionChip.createSpan({ cls: "agy-chip-label", text: "@selection" });
+    this.selectionChip.createSpan({
+      cls: "agy-chip-label",
+      text: "@selection",
+    });
 
-    this.noteChip = chips.createSpan({ cls: "agy-chip" });
+    this.noteChip = chips.createSpan({
+      cls: "agy-chip agy-chip--hidden",
+    });
     this.noteChip.createSpan({ cls: "agy-chip-dot" });
-    this.noteChip.createSpan({ cls: "agy-chip-label", text: "@note" });
+    this.noteChip.createSpan({
+      cls: "agy-chip-label",
+      text: "@note",
+    });
 
     const row = parent.createDiv({ cls: "agy-composer-row" });
 
     this.input = row.createEl("textarea", {
       cls: "agy-input",
-      attr: { placeholder: "Ask AGY…", rows: "1" },
+      attr: {
+        placeholder: "Ask about what you're learning…",
+        rows: "1",
+      },
     });
-    this.input.addEventListener("input",   () => this.onInput());
-    this.input.addEventListener("keydown", (e) => this.onKey(e));
+    this.input.addEventListener("input", () => this.onInput());
+    this.input.addEventListener("keydown", (event) => this.onKey(event));
 
     const btnGroup = row.createDiv({ cls: "agy-btn-group" });
 
@@ -182,13 +234,10 @@ export class ChatView extends ItemView {
     });
     this.cancelBtn.title = "Stop";
     this.cancelBtn.addEventListener("click", () => {
-      this.sc.destroy();
+      this.learning.cancel();
       this.setUIState("ANSWER");
       this.appendInlineError(this.thread, "Stopped.");
-      this.agyCursorEl?.removeClass("agy-bubble--streaming");
-      this.statusEl?.addClass("agy-hidden");
-      this.agyCursorEl = null;
-      this.statusEl = null;
+      this.finishStreamingBubble();
     });
 
     this.sendBtn = btnGroup.createEl("button", {
@@ -196,45 +245,79 @@ export class ChatView extends ItemView {
       text: "↑",
     });
     this.sendBtn.disabled = true;
-    this.sendBtn.addEventListener("click", () => this.doSend());
+    this.sendBtn.addEventListener("click", () => {
+      void this.doSend();
+    });
   }
 
-  private syncChips(): void {
-    const file = this.app.workspace.getActiveFile();
-    const name = file?.basename ?? "note";
-    this.noteChip.querySelector<HTMLElement>(".agy-chip-label")!.textContent = `@${name}`;
+  private syncActionButtons(): void {
+    for (const [kind, button] of this.actionButtons) {
+      const active = kind === this.selectedAction;
+      button.toggleClass("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+  }
 
-    const hasSel = !!this.ctx.getSelection();
-    this.selectionChip.toggleClass("agy-chip--hidden", !hasSel);
+  private updatePlaceholder(): void {
+    const placeholders: Record<LearningActionKind, string> = {
+      ask: "Ask about what you're learning…",
+      explain: "What should I explain?",
+      practice: "What should we practice?",
+      review: "What should I review?",
+      edit: "How should I improve this note?",
+    };
+
+    if (this.input) {
+      this.input.placeholder = placeholders[this.selectedAction];
+    }
+  }
+
+  private async syncChips(): Promise<void> {
+    const context = await this.learning.resolveContext(this.extraCtx);
+    this.currentContext = context;
+
+    const hasSelection = Boolean(context.selection);
+    this.selectionChip.toggleClass("agy-chip--hidden", !hasSelection);
+
+    const activeNote = context.activeNote;
+    this.noteChip.toggleClass("agy-chip--hidden", !activeNote);
+
+    if (activeNote) {
+      const name = activeNote.path.split("/").pop() ?? activeNote.path;
+      const label = this.noteChip.querySelector<HTMLElement>(".agy-chip-label");
+      if (label) label.textContent = `@${name}`;
+      this.noteChip.title = activeNote.path;
+    }
   }
 
   private onInput(): void {
-    this.sendBtn.disabled = this.input.value.trim() === "" || (this.uiState as UIState) === "RUNNING";
+    this.sendBtn.disabled =
+      this.input.value.trim() === "" || this.uiState === "RUNNING";
+
     this.input.style.height = "auto";
-    this.input.style.height = Math.min(this.input.scrollHeight, 80) + "px";
+    this.input.style.height =
+      Math.min(this.input.scrollHeight, 80) + "px";
   }
 
-  private onKey(e: KeyboardEvent): void {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (!this.sendBtn.disabled) this.doSend();
+  private onKey(event: KeyboardEvent): void {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (!this.sendBtn.disabled) void this.doSend();
     }
-    if (e.key === "Escape" && (this.uiState as UIState) === "RUNNING") {
+
+    if (event.key === "Escape" && this.uiState === "RUNNING") {
       this.cancelBtn.click();
     }
   }
 
-  // ─── Send turn ─────────────────────────────────────────────────────────────
-
   private async doSend(): Promise<void> {
     const prompt = this.input.value.trim();
-    if (!prompt || (this.uiState as UIState) === "RUNNING") return;
+    if (!prompt || this.uiState === "RUNNING") return;
 
     this.input.value = "";
     this.input.style.height = "";
     this.sendBtn.disabled = true;
 
-    // Reset per-turn bubble & status refs
     this.agyCursorEl = null;
     this.statusEl = null;
 
@@ -242,160 +325,185 @@ export class ChatView extends ItemView {
     this.setUIState("RUNNING");
     this.ensureAgyBubble();
 
-    const TIMEOUT_MS = 60_000;
     const timeout = window.setTimeout(() => {
-      this.sc.destroy();
+      this.learning.cancel();
       this.setUIState("ANSWER");
-      this.agyCursorEl?.removeClass("agy-bubble--streaming");
-      this.statusEl?.addClass("agy-hidden");
-      this.agyCursorEl = null;
-      this.statusEl = null;
-      this.appendInlineError(this.thread, "No response after 60 s. AGY may be busy.");
-    }, TIMEOUT_MS);
+      this.finishStreamingBubble();
+      this.appendInlineError(
+        this.thread,
+        "No response after 60 s. AGY may be busy.",
+      );
+    }, 60_000);
 
     try {
-      let proposalText = "";
-      let inProposalBlock = false;
-      let fullText = "";
-
-      for await (const event of this.sc.sendTurn(prompt, this.extraCtx)) {
-        if (event.type === "text") {
-          fullText += event.content;
-
-          // ── Detect structured edit proposal (Spike 3) ──────────────────
-          // AGY is prompted (via system instructions) to emit proposals as
-          // a fenced JSON block: ```edit-proposal\n{...}\n```
-          // We buffer and detect that block without showing it raw.
-          const merged = fullText;
-          const startTag = "```edit-proposal";
-          const endTag   = "```";
-
-          if (!inProposalBlock && merged.includes(startTag)) {
-            inProposalBlock = true;
-            // Render text before the block
-            const before = merged.slice(0, merged.indexOf(startTag));
-            this.appendToAgyBubble(before.replace(fullText.slice(0, fullText.indexOf(startTag)), ""));
-          } else if (inProposalBlock) {
-            proposalText = merged.slice(merged.indexOf(startTag) + startTag.length);
-            const closeIdx = proposalText.indexOf("\n" + endTag);
-            if (closeIdx !== -1) {
-              // Proposal complete — parse and show proposal bubble
-              const json = proposalText.slice(0, closeIdx).trim();
-              inProposalBlock = false;
-              try {
-                const proposal = JSON.parse(json) as EditProposal;
-                window.clearTimeout(timeout);
-                this.setUIState("PROPOSAL");
-                this.appendProposalBubble(proposal);
-              } catch {
-                this.appendInlineError(this.thread, "Could not parse edit proposal.");
-                this.setUIState("ANSWER");
-              }
-            }
-          } else {
-            // Normal streaming text
-            this.appendToAgyBubble(event.content);
-            this.scrollThread();
-          }
-        }
-
-        if (event.type === "done") {
-          window.clearTimeout(timeout);
-          if ((this.uiState as UIState) === "RUNNING") this.setUIState("ANSWER");
-          this.agyCursorEl?.removeClass("agy-bubble--streaming");
-          this.statusEl?.addClass("agy-hidden");
-          this.agyCursorEl = null;
-          this.statusEl = null;
-        }
-
-        if (event.type === "error") {
-          window.clearTimeout(timeout);
-          this.agyCursorEl?.removeClass("agy-bubble--streaming");
-          this.statusEl?.addClass("agy-hidden");
-          this.appendInlineError(this.thread, event.error);
-          this.setUIState("ANSWER");
-          this.agyCursorEl = null;
-          this.statusEl = null;
-        }
+      for await (const event of this.learning.run({
+        prompt,
+        action: this.selectedAction,
+        explicitContext: this.extraCtx,
+      })) {
+        this.handleLearningEvent(event, timeout);
       }
     } catch (err) {
       window.clearTimeout(timeout);
-      this.agyCursorEl?.removeClass("agy-bubble--streaming");
-      this.statusEl?.addClass("agy-hidden");
-      this.agyCursorEl = null;
-      this.statusEl = null;
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("not found") || msg.includes("ENOENT")) {
+      this.finishStreamingBubble();
+
+      const message =
+        err instanceof Error ? err.message : String(err);
+
+      if (message.includes("not found") || message.includes("ENOENT")) {
         this.showError("AGY CLI not found. Make sure 'agy' is in PATH.");
       } else {
-        this.appendInlineError(this.thread, msg);
+        this.appendInlineError(this.thread, message);
         this.setUIState("ANSWER");
       }
     }
   }
 
-  // ─── State management ───────────────────────────────────────────────────────
+  private handleLearningEvent(
+    event: LearningEvent,
+    timeout: number,
+  ): void {
+    if (event.type === "context-ready") {
+      this.currentContext = event.context;
+      return;
+    }
 
-  private setUIState(s: UIState): void {
-    this.uiState = s;
-    const busy = s === "RUNNING";
-    this.input.disabled = busy || s === "ERROR";
-    this.sendBtn.disabled = busy || s === "ERROR" || this.input.value.trim() === "";
+    if (event.type === "response-delta") {
+      this.appendToAgyBubble(event.text);
+      this.scrollThread();
+      return;
+    }
+
+    if (event.type === "mutation-proposed") {
+      this.setUIState("PROPOSAL");
+      this.appendProposalBubble(event.proposal);
+      return;
+    }
+
+    if (event.type === "completed") {
+      window.clearTimeout(timeout);
+      if (this.uiState === "RUNNING") {
+        this.setUIState("ANSWER");
+      }
+      this.finishStreamingBubble();
+      return;
+    }
+
+    if (event.type === "error") {
+      window.clearTimeout(timeout);
+      this.finishStreamingBubble();
+      this.appendInlineError(this.thread, event.message);
+      this.setUIState("ANSWER");
+    }
+  }
+
+  private finishStreamingBubble(): void {
+    this.agyCursorEl?.removeClass("agy-bubble--streaming");
+    this.statusEl?.addClass("agy-hidden");
+    this.agyCursorEl = null;
+    this.statusEl = null;
+  }
+
+  private setUIState(state: UIState): void {
+    this.uiState = state;
+
+    const busy = state === "RUNNING";
+    this.input.disabled = busy || state === "ERROR";
+    this.sendBtn.disabled =
+      busy || state === "ERROR" || this.input.value.trim() === "";
     this.cancelBtn.toggleClass("agy-hidden", !busy);
     this.statusEl?.toggleClass("agy-hidden", !busy);
   }
-
-  // ─── Empty / Error slates ───────────────────────────────────────────────────
 
   private showEmpty(): void {
     this.thread.empty();
     this.agyCursorEl = null;
     this.statusEl = null;
-    const slate = this.thread.createDiv({ cls: "agy-empty-slate" });
-    slate.createDiv({ cls: "agy-empty-icon", text: "✦" });
-    slate.createDiv({ cls: "agy-empty-label", text: "Ask AGY about this note" });
+
+    const slate = this.thread.createDiv({
+      cls: "agy-empty-slate",
+    });
+    slate.createDiv({
+      cls: "agy-empty-icon",
+      text: "✦",
+    });
+
+    let label = "Open a note or ask about your Learning OS.";
+
+    if (this.currentContext?.selection) {
+      label = "Selection ready — explain, practice, review, or edit it.";
+    } else if (this.currentContext?.activeNote) {
+      const name =
+        this.currentContext.activeNote.path.split("/").pop() ??
+        this.currentContext.activeNote.path;
+      label = `Learn with ${name}`;
+    }
+
+    slate.createDiv({
+      cls: "agy-empty-label",
+      text: label,
+    });
+
     this.setUIState("EMPTY");
-    this.syncChips();
   }
 
-  private showError(msg: string): void {
+  private showError(message: string): void {
     this.thread.empty();
     this.agyCursorEl = null;
     this.statusEl = null;
-    const slate = this.thread.createDiv({ cls: "agy-error-slate" });
-    slate.createDiv({ cls: "agy-error-icon", text: "⚠" });
-    slate.createDiv({ cls: "agy-error-title", text: "AGY unavailable" });
-    slate.createDiv({ cls: "agy-error-body", text: msg });
-    const btn = slate.createEl("button", {
+
+    const slate = this.thread.createDiv({
+      cls: "agy-error-slate",
+    });
+    slate.createDiv({
+      cls: "agy-error-icon",
+      text: "⚠",
+    });
+    slate.createDiv({
+      cls: "agy-error-title",
+      text: "AGY unavailable",
+    });
+    slate.createDiv({
+      cls: "agy-error-body",
+      text: message,
+    });
+
+    const button = slate.createEl("button", {
       cls: "agy-configure-btn",
       text: "Configure AGY →",
     });
-    btn.addEventListener("click", () => {
+    button.addEventListener("click", () => {
       (this.app as any).setting?.open?.();
     });
+
     this.setUIState("ERROR");
   }
 
-  // ─── Bubble builders ────────────────────────────────────────────────────────
-
   private appendUserBubble(text: string): void {
-    // Remove empty slate if first message
     this.thread.querySelector(".agy-empty-slate")?.remove();
-    const b = this.thread.createDiv({ cls: "agy-bubble agy-bubble--user" });
-    b.setText(text);
+    const bubble = this.thread.createDiv({
+      cls: "agy-bubble agy-bubble--user",
+    });
+    bubble.setText(text);
   }
 
   private ensureAgyBubble(): void {
     if (this.agyCursorEl) return;
 
-    // Status line
-    this.statusEl = this.thread.createDiv({ cls: "agy-status-line" });
-    this.statusEl.createDiv({ cls: "agy-spinner" });
-    const label = this.statusEl.createSpan();
-    const sel = this.ctx.getSelection();
-    label.textContent = sel ? "Reading selection…" : "Reading note…";
+    this.statusEl = this.thread.createDiv({
+      cls: "agy-status-line",
+    });
+    this.statusEl.createDiv({
+      cls: "agy-spinner",
+    });
 
-    // Response bubble
+    const label = this.statusEl.createSpan();
+    label.textContent = this.currentContext?.selection
+      ? "Reading selection…"
+      : this.currentContext?.activeNote
+        ? "Reading note…"
+        : "Thinking…";
+
     this.agyCursorEl = this.thread.createDiv({
       cls: "agy-bubble agy-bubble--agy agy-bubble--streaming",
     });
@@ -407,30 +515,49 @@ export class ChatView extends ItemView {
   }
 
   private appendProposalBubble(proposal: EditProposal): void {
-    const wrap = this.thread.createDiv({ cls: "agy-proposal" });
+    const wrap = this.thread.createDiv({
+      cls: "agy-proposal",
+    });
 
-    // File badge
-    wrap.createDiv({ cls: "agy-proposal-badge", text: "📄 " + proposal.file });
+    wrap.createDiv({
+      cls: "agy-proposal-badge",
+      text: "📄 " + proposal.file,
+    });
 
-    // Diff
     if (proposal.reason) {
-      wrap.createDiv({ cls: "agy-proposal-reason", text: proposal.reason });
+      wrap.createDiv({
+        cls: "agy-proposal-reason",
+        text: proposal.reason,
+      });
     }
-    const diff = wrap.createDiv({ cls: "agy-proposal-diff" });
-    proposal.original.split("\n").forEach((line) =>
-      diff.createDiv({ cls: "agy-diff-removed", text: "- " + line })
-    );
-    proposal.replacement.split("\n").forEach((line) =>
-      diff.createDiv({ cls: "agy-diff-added",   text: "+ " + line })
-    );
 
-    // Actions (Spike 4)
-    const actions = wrap.createDiv({ cls: "agy-proposal-actions" });
+    const diff = wrap.createDiv({
+      cls: "agy-proposal-diff",
+    });
+
+    proposal.original.split("\n").forEach((line) => {
+      diff.createDiv({
+        cls: "agy-diff-removed",
+        text: "- " + line,
+      });
+    });
+
+    proposal.replacement.split("\n").forEach((line) => {
+      diff.createDiv({
+        cls: "agy-diff-added",
+        text: "+ " + line,
+      });
+    });
+
+    const actions = wrap.createDiv({
+      cls: "agy-proposal-actions",
+    });
 
     const rejectBtn = actions.createEl("button", {
       cls: "agy-btn-reject",
       text: "Reject",
     });
+
     const applyBtn = actions.createEl("button", {
       cls: "agy-btn-apply",
       text: "Apply ✓",
@@ -449,7 +576,7 @@ export class ChatView extends ItemView {
       applyBtn.disabled = true;
       applyBtn.textContent = "Applying…";
 
-      const result = await this.sc.applyProposal(proposal);
+      const result = await this.learning.applyProposal(proposal);
       actions.remove();
 
       if (result.ok) {
@@ -470,12 +597,21 @@ export class ChatView extends ItemView {
     this.scrollThread();
   }
 
-  private appendInlineError(parent: HTMLElement, msg: string): void {
-    parent.createDiv({ cls: "agy-inline-error", text: "⚠ " + msg });
+  private appendInlineError(
+    parent: HTMLElement,
+    message: string,
+  ): void {
+    parent.createDiv({
+      cls: "agy-inline-error",
+      text: "⚠ " + message,
+    });
     this.scrollThread();
   }
 
   private scrollThread(): void {
-    this.thread.scrollTo({ top: this.thread.scrollHeight, behavior: "smooth" });
+    this.thread.scrollTo({
+      top: this.thread.scrollHeight,
+      behavior: "smooth",
+    });
   }
 }
