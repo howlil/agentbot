@@ -5,6 +5,10 @@ import {
   LearningEvent,
 } from "../learning/learning-types";
 import { LearningContext } from "../context/context-types";
+import {
+  PracticeEvaluation,
+  PracticeQuestion,
+} from "../learning/practice-types";
 import { AgentContext, EditProposal } from "../types";
 
 export const AGY_VIEW_TYPE = "agy-sidebar";
@@ -374,6 +378,22 @@ export class ChatView extends ItemView {
       return;
     }
 
+    if (event.type === "practice-question") {
+      this.appendPracticeQuestion(event.question);
+      return;
+    }
+
+    if (event.type === "practice-evaluation") {
+      this.appendPracticeEvaluation(event.evaluation);
+      return;
+    }
+
+    if (event.type === "learning-state-updated") {
+      // Durable progress is intentionally quiet. The interaction itself is the
+      // primary UI; progress state is supporting context for future turns.
+      return;
+    }
+
     if (event.type === "mutation-proposed") {
       this.setUIState("PROPOSAL");
       this.appendProposalBubble(event.proposal);
@@ -512,6 +532,78 @@ export class ChatView extends ItemView {
   private appendToAgyBubble(text: string): void {
     if (!this.agyCursorEl) return;
     this.agyCursorEl.appendText(text);
+  }
+
+  private appendPracticeQuestion(
+    question: PracticeQuestion,
+  ): void {
+    if (!this.agyCursorEl) return;
+
+    const card = this.agyCursorEl.createDiv({
+      cls: "agy-practice-card",
+    });
+    card.createDiv({
+      cls: "agy-practice-label",
+      text: `Practice · ${question.concept}`,
+    });
+    card.createDiv({
+      cls: "agy-practice-question",
+      text: question.question,
+    });
+
+    if (question.hint) {
+      card.createDiv({
+        cls: "agy-practice-hint",
+        text: `Hint: ${question.hint}`,
+      });
+    }
+
+    this.scrollThread();
+  }
+
+  private appendPracticeEvaluation(
+    evaluation: PracticeEvaluation,
+  ): void {
+    if (!this.agyCursorEl) return;
+
+    const card = this.agyCursorEl.createDiv({
+      cls: "agy-practice-evaluation",
+    });
+
+    const outcomeLabel =
+      evaluation.outcome === "correct"
+        ? "Correct"
+        : evaluation.outcome === "partial"
+          ? "Partial"
+          : "Needs work";
+
+    card.createDiv({
+      cls: "agy-practice-label",
+      text: `${outcomeLabel} · ${evaluation.concept}`,
+    });
+    card.createDiv({
+      cls: "agy-practice-feedback",
+      text: evaluation.feedback,
+    });
+
+    if (evaluation.misconceptions.length > 0) {
+      const gaps = card.createDiv({
+        cls: "agy-practice-gaps",
+      });
+      gaps.createDiv({
+        cls: "agy-practice-gaps-label",
+        text: "Gap",
+      });
+
+      for (const misconception of evaluation.misconceptions) {
+        gaps.createDiv({
+          cls: "agy-practice-gap",
+          text: misconception,
+        });
+      }
+    }
+
+    this.scrollThread();
   }
 
   private appendProposalBubble(proposal: EditProposal): void {
