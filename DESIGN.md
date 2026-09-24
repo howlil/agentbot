@@ -1,8 +1,8 @@
-# Forge Design System
+# Nox Design System
 
 ## Design contract
 
-Forge is a compact Learning OS control surface inside Obsidian.
+Nox is a compact Learning OS control surface inside Obsidian.
 
 ```text
 user intent
@@ -22,7 +22,7 @@ accent. Purple is semantic, not decorative.
 ## Root graph
 
 ```text
-Forge
+Nox
 ├── Header
 ├── Thread
 │   ├── UserBubble
@@ -83,7 +83,7 @@ Use a deliberate light-mode token ratio:
 5% purple accent for active AI state and primary actions
 ```
 
-Forge owns these semantic tokens instead of inheriting arbitrary Obsidian
+Nox owns these semantic tokens instead of inheriting arbitrary Obsidian
 theme colors. Purple means active AI intent, focus, selection, or a primary AI
 action. It should not decorate every surface.
 

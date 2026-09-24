@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-const PLUGIN_ID = "forge-obsidian";
+const PLUGIN_ID = "nox-obsidian";
 
 // Known default vault paths (ordered by recent usage)
 const DEFAULT_VAULTS = [

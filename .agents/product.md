@@ -1,11 +1,11 @@
-# Product — Forge Learning OS for Obsidian
+# Product — Nox Learning OS for Obsidian
 
-Forge keeps understanding, practice, review, and safe AI editing beside the
+Nox keeps understanding, practice, review, and safe AI editing beside the
 learning material already stored in Obsidian.
 
 ```text
 material + explicit context + learning state
-→ Forge
+→ Nox
 → explain / practice / review / edit
 → understanding + evidence + approved vault change
 ```

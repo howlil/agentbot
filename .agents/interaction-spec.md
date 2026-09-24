@@ -1,4 +1,4 @@
-# Forge Interaction Spec
+# Nox Interaction Spec
 
 One Obsidian right-sidebar ItemView:
 

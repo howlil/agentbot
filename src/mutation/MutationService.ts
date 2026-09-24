@@ -5,7 +5,7 @@ import { planReplacement } from "./replacement";
 /**
  * Owns user-approved Markdown mutations.
  *
- * Forge v1 only mutates the active turn's primary Markdown note through an
+ * Nox v1 only mutates the active turn's primary Markdown note through an
  * open Obsidian editor. Supporting notes remain read-only context so Apply
  * always participates in native editor history and Ctrl/Cmd+Z remains valid.
  */
@@ -21,7 +21,7 @@ export class MutationService {
         ok: false,
         reason: "unauthorized",
         message:
-          "Forge can only edit the primary note used for this turn.",
+          "Nox can only edit the primary note used for this turn.",
       };
     }
 

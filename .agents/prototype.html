@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Forge Plugin — Interaction Prototype</title>
+<title>Nox Plugin — Interaction Prototype</title>
 <style>
   /* ─── Reset & Base ─────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -464,7 +464,7 @@
   <!-- Sidebar -->
   <div class="sidebar">
     <div class="sidebar-header">
-      <span class="sidebar-title">✦ Forge</span>
+      <span class="sidebar-title">✦ Nox</span>
       <span class="sidebar-icon">✕</span>
     </div>
 
@@ -474,8 +474,8 @@
       <!-- EMPTY state -->
       <div class="empty-slate" id="state-empty">
         <span class="empty-icon">✦</span>
-        <span class="empty-label">Ask Forge about this note</span>
-        <span class="empty-hint">Selection detected — Forge will read it</span>
+        <span class="empty-label">Ask Nox about this note</span>
+        <span class="empty-hint">Selection detected — Nox will read it</span>
       </div>
 
       <!-- RUNNING state content -->
@@ -542,7 +542,7 @@
       <div class="error-slate hidden" id="state-error">
         <span class="error-icon">⚠</span>
         <span class="error-title">Agent unavailable</span>
-        <span class="error-body">Forge could not reach its agent runtime.</span>
+        <span class="error-body">Nox could not reach its agent runtime.</span>
         <button class="btn-configure">Configure runtime →</button>
       </div>
 
@@ -558,7 +558,7 @@
         <textarea
           class="composer-textarea"
           id="composer-input"
-          placeholder="Ask Forge…"
+          placeholder="Ask Nox…"
           rows="1"
           oninput="handleInput(this)"
           onkeydown="handleKey(event)"
@@ -594,7 +594,7 @@ const STATES = {
     sendDisabled: true,
     editorSelected: true,
     editorApplied: false,
-    annotation: '<strong>RUNNING</strong> — Textarea disabled. Forge is reading selection. Tokens stream in.<br><span class="action-hint">→ Wait a moment… (click ③ PROPOSAL to jump ahead)</span>',
+    annotation: '<strong>RUNNING</strong> — Textarea disabled. Nox is reading selection. Tokens stream in.<br><span class="action-hint">→ Wait a moment… (click ③ PROPOSAL to jump ahead)</span>',
   },
   proposal: {
     show: ['state-proposal'],

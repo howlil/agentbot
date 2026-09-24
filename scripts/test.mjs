@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { spawnSync } from "child_process";
 
-const dir = mkdtempSync(join(tmpdir(), "forge-tests-"));
+const dir = mkdtempSync(join(tmpdir(), "nox-tests-"));
 const outfile = join(dir, "tests.mjs");
 
 try {

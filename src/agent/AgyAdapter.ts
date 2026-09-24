@@ -35,7 +35,7 @@ function escapeAttribute(value: string): string {
 // Prompts are written to stdin as one JSON user event per line. This keeps
 // note/context payloads out of OS argv and avoids command-line size limits.
 // Each send() still owns one process so cancellation and conversation
-// persistence remain simple at the Forge boundary.
+// persistence remain simple at the Nox boundary.
 
 export class AgyAdapter implements AgentAdapter {
   constructor(
@@ -270,7 +270,7 @@ export class AgyAdapter implements AgentAdapter {
       stderr += message;
       const trimmed = message.trim();
       if (trimmed) {
-        console.warn("[Forge agent provider]", trimmed);
+        console.warn("[Nox agent provider]", trimmed);
       }
     });
 

@@ -1,23 +1,23 @@
 import { Plugin } from "obsidian";
 
-export const FORGE_SETTINGS_KEY = "forge-settings";
+export const NOX_SETTINGS_KEY = "nox-settings";
 
-export interface ForgeSettings {
+export interface NoxSettings {
   executablePath: string;
   preferredModel: string;
 }
 
-export const DEFAULT_FORGE_SETTINGS: ForgeSettings = {
+export const DEFAULT_NOX_SETTINGS: NoxSettings = {
   executablePath: "",
   preferredModel: "",
 };
 
-export function decodeForgeSettings(
+export function decodeNoxSettings(
   rawData: Record<string, unknown> | null,
-): ForgeSettings {
-  const value = rawData?.[FORGE_SETTINGS_KEY];
-  if (!value || typeof value !== "object") return { ...DEFAULT_FORGE_SETTINGS };
-  const candidate = value as Partial<ForgeSettings>;
+): NoxSettings {
+  const value = rawData?.[NOX_SETTINGS_KEY];
+  if (!value || typeof value !== "object") return { ...DEFAULT_NOX_SETTINGS };
+  const candidate = value as Partial<NoxSettings>;
   return {
     executablePath:
       typeof candidate.executablePath === "string"
@@ -30,13 +30,13 @@ export function decodeForgeSettings(
   };
 }
 
-export async function saveForgeSettings(
+export async function saveNoxSettings(
   plugin: Plugin,
-  settings: ForgeSettings,
+  settings: NoxSettings,
 ): Promise<void> {
   const current = (await plugin.loadData()) ?? {};
   await plugin.saveData({
     ...current,
-    [FORGE_SETTINGS_KEY]: settings,
+    [NOX_SETTINGS_KEY]: settings,
   });
 }

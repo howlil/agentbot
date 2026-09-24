@@ -22,7 +22,7 @@ import { ReviewFinding } from "../learning/review-types";
 import { ChatMessage, EditProposal } from "../types";
 import { ProposedEdit } from "../learning/learning-types";
 
-export const FORGE_VIEW_TYPE = "forge-sidebar";
+export const NOX_VIEW_TYPE = "nox-sidebar";
 
 type UIState =
   | "EMPTY"
@@ -71,7 +71,7 @@ interface PromptMenuItem {
   action: PromptMenuAction;
 }
 
-function setForgeIcon(element: HTMLElement, icon: IconName): void {
+function setNoxIcon(element: HTMLElement, icon: IconName): void {
   element.empty();
   setIcon(element, icon);
 }
@@ -154,25 +154,25 @@ export class ChatView extends ItemView {
   }
 
   getViewType() {
-    return FORGE_VIEW_TYPE;
+    return NOX_VIEW_TYPE;
   }
 
   getDisplayText() {
-    return "Forge";
+    return "Nox";
   }
 
   getIcon() {
-    return "forge-logo";
+    return "nox-logo";
   }
 
   async onOpen(): Promise<void> {
     const root = this.contentEl;
     root.empty();
-    root.addClass("forge-root");
+    root.addClass("nox-root");
 
     this.buildHeader(root);
-    this.thread = root.createDiv({ cls: "forge-thread" });
-    this.composer = root.createDiv({ cls: "forge-composer" });
+    this.thread = root.createDiv({ cls: "nox-thread" });
+    this.composer = root.createDiv({ cls: "nox-composer" });
     this.buildComposer(this.composer);
 
     try {
@@ -182,7 +182,7 @@ export class ChatView extends ItemView {
         return;
       }
     } catch {
-      this.showError("Agent runtime is unavailable. Check Forge runtime settings.");
+      this.showError("Agent runtime is unavailable. Check Nox runtime settings.");
       return;
     }
 
@@ -214,30 +214,30 @@ export class ChatView extends ItemView {
   }
 
   private buildHeader(root: HTMLElement): void {
-    this.headerEl = root.createDiv({ cls: "forge-header" });
-    const top = this.headerEl.createDiv({ cls: "forge-header-top" });
-    const brand = top.createDiv({ cls: "forge-header-brand" });
+    this.headerEl = root.createDiv({ cls: "nox-header" });
+    const top = this.headerEl.createDiv({ cls: "nox-header-top" });
+    const brand = top.createDiv({ cls: "nox-header-brand" });
     brand.createEl("img", {
-      cls: "forge-header-logo",
+      cls: "nox-header-logo",
       attr: {
         src: this.getLogoUrl(),
-        alt: "Forge",
+        alt: "Nox",
       },
     });
 
-    const copy = brand.createDiv({ cls: "forge-header-copy" });
-    copy.createSpan({ cls: "forge-header-title", text: "Forge" });
+    const copy = brand.createDiv({ cls: "nox-header-copy" });
+    copy.createSpan({ cls: "nox-header-title", text: "Nox" });
 
-    const right = top.createDiv({ cls: "forge-header-right" });
+    const right = top.createDiv({ cls: "nox-header-right" });
 
     const newBtn = right.createEl("button", {
-      cls: "forge-new-btn",
+      cls: "nox-new-btn",
       attr: {
         type: "button",
         "aria-label": "New learning session",
       },
     });
-    setForgeIcon(newBtn, "plus");
+    setNoxIcon(newBtn, "plus");
     newBtn.title = "New learning session";
     newBtn.addEventListener("click", async () => {
       await this.learning.newSession();
@@ -251,21 +251,21 @@ export class ChatView extends ItemView {
     });
 
     const moreBtn = right.createEl("button", {
-      cls: "forge-more-btn",
+      cls: "nox-more-btn",
       attr: {
         type: "button",
-        "aria-label": "Open Forge settings",
+        "aria-label": "Open Nox settings",
       },
     });
-    setForgeIcon(moreBtn, "more-horizontal");
-    moreBtn.title = "Forge settings";
+    setNoxIcon(moreBtn, "more-horizontal");
+    moreBtn.title = "Nox settings";
     moreBtn.addEventListener("click", () => this.openSettings());
   }
 
   private buildActionButtons(parent: HTMLElement): void {
     for (const action of ACTIONS) {
       const button = parent.createEl("button", {
-        cls: "forge-action-btn",
+        cls: "nox-action-btn",
         text: action.label,
       });
       button.type = "button";
@@ -305,47 +305,47 @@ export class ChatView extends ItemView {
   }
 
   private buildComposer(parent: HTMLElement): void {
-    const contextRow = parent.createDiv({ cls: "forge-context-row" });
+    const contextRow = parent.createDiv({ cls: "nox-context-row" });
     contextRow.createSpan({
-      cls: "forge-context-label",
+      cls: "nox-context-label",
       text: "Using",
     });
 
-    const chips = contextRow.createDiv({ cls: "forge-chips" });
+    const chips = contextRow.createDiv({ cls: "nox-chips" });
 
     this.selectionChip = chips.createSpan({
-      cls: "forge-chip forge-chip--hidden",
+      cls: "nox-chip nox-chip--hidden",
     });
-    this.selectionChip.createSpan({ cls: "forge-chip-dot" });
+    this.selectionChip.createSpan({ cls: "nox-chip-dot" });
     this.selectionChip.createSpan({
-      cls: "forge-chip-label",
+      cls: "nox-chip-label",
       text: "@selection",
     });
 
     this.noteChip = chips.createSpan({
-      cls: "forge-chip forge-chip--hidden",
+      cls: "nox-chip nox-chip--hidden",
     });
-    this.noteChip.createSpan({ cls: "forge-chip-dot" });
+    this.noteChip.createSpan({ cls: "nox-chip-dot" });
     this.noteChip.createSpan({
-      cls: "forge-chip-label",
+      cls: "nox-chip-label",
       text: "@note",
     });
 
     this.systemChip = chips.createSpan({
-      cls: "forge-chip forge-chip--hidden",
+      cls: "nox-chip nox-chip--hidden",
     });
-    this.systemChip.createSpan({ cls: "forge-chip-dot" });
+    this.systemChip.createSpan({ cls: "nox-chip-dot" });
     this.systemChip.createSpan({
-      cls: "forge-chip-label",
-      text: "@forge-system",
+      cls: "nox-chip-label",
+      text: "@nox-system",
     });
 
-    const anchor = parent.createDiv({ cls: "forge-prompt-anchor" });
+    const anchor = parent.createDiv({ cls: "nox-prompt-anchor" });
     this.promptMenuEl = anchor.createDiv({
-      cls: "forge-prompt-menu forge-hidden",
+      cls: "nox-prompt-menu nox-hidden",
     });
 
-    const box = anchor.createDiv({ cls: "forge-composer-box" });
+    const box = anchor.createDiv({ cls: "nox-composer-box" });
     box.addEventListener("click", (event) => {
       if (!(event.target instanceof HTMLButtonElement) &&
           !(event.target instanceof HTMLSelectElement)) {
@@ -354,15 +354,15 @@ export class ChatView extends ItemView {
     });
 
     this.intentEl = box.createDiv({
-      cls: "forge-intent-row forge-hidden",
+      cls: "nox-intent-row nox-hidden",
     });
 
     this.attachmentsEl = box.createDiv({
-      cls: "forge-attachments forge-hidden",
+      cls: "nox-attachments nox-hidden",
     });
 
     this.fileInput = box.createEl("input", {
-      cls: "forge-file-input",
+      cls: "nox-file-input",
       attr: {
         type: "file",
         multiple: "",
@@ -373,10 +373,10 @@ export class ChatView extends ItemView {
       void this.handleFiles(this.fileInput.files);
     });
 
-    const controls = box.createDiv({ cls: "forge-composer-controls" });
+    const controls = box.createDiv({ cls: "nox-composer-controls" });
 
     this.input = controls.createEl("textarea", {
-      cls: "forge-input",
+      cls: "nox-input",
       attr: {
         placeholder: "Ask anything about this note...",
         rows: "1",
@@ -385,16 +385,16 @@ export class ChatView extends ItemView {
     this.input.addEventListener("input", () => this.onInput());
     this.input.addEventListener("keydown", (event) => this.onKey(event));
 
-    const footer = box.createDiv({ cls: "forge-composer-footer" });
+    const footer = box.createDiv({ cls: "nox-composer-footer" });
     this.promptPlusBtn = footer.createEl("button", {
-      cls: "forge-prompt-plus",
+      cls: "nox-prompt-plus",
       attr: {
         type: "button",
         "aria-label": "Add context or file",
         "aria-expanded": "false",
       },
     });
-    setForgeIcon(this.promptPlusBtn, "plus");
+    setNoxIcon(this.promptPlusBtn, "plus");
     this.promptPlusBtn.title = "Add context or file";
     this.promptPlusBtn.addEventListener("click", () => {
       this.promptMenu = this.promptMenu === "source" ? null : "source";
@@ -403,10 +403,10 @@ export class ChatView extends ItemView {
       this.input.focus();
     });
 
-    const tools = footer.createDiv({ cls: "forge-composer-tools" });
+    const tools = footer.createDiv({ cls: "nox-composer-tools" });
 
     this.modelSelect = tools.createEl("select", {
-      cls: "forge-model-select",
+      cls: "nox-model-select",
     });
     this.modelSelect.addEventListener("change", () => {
       this.learning.setModel(this.modelSelect.value);
@@ -421,13 +421,13 @@ export class ChatView extends ItemView {
       },
     });
 
-    const btnGroup = footer.createDiv({ cls: "forge-btn-group" });
+    const btnGroup = footer.createDiv({ cls: "nox-btn-group" });
 
     this.cancelBtn = btnGroup.createEl("button", {
-      cls: "forge-cancel-btn forge-hidden",
+      cls: "nox-cancel-btn nox-hidden",
       attr: { type: "button", "aria-label": "Stop generating" },
     });
-    setForgeIcon(this.cancelBtn, "x");
+    setNoxIcon(this.cancelBtn, "x");
     this.cancelBtn.title = "Stop";
     this.cancelBtn.setAttribute("aria-label", "Stop generating");
     this.cancelBtn.addEventListener("click", () => {
@@ -436,10 +436,10 @@ export class ChatView extends ItemView {
     });
 
     this.sendBtn = btnGroup.createEl("button", {
-      cls: "forge-send-btn",
+      cls: "nox-send-btn",
       attr: { type: "button", "aria-label": "Send message" },
     });
-    setForgeIcon(this.sendBtn, "arrow-up");
+    setNoxIcon(this.sendBtn, "arrow-up");
     this.sendBtn.title = "Send message";
     this.sendBtn.setAttribute("aria-label", "Send message");
     this.sendBtn.disabled = true;
@@ -448,7 +448,7 @@ export class ChatView extends ItemView {
     });
 
     parent.createDiv({
-      cls: "forge-composer-hint",
+      cls: "nox-composer-hint",
       text: "Enter to send · Shift + Enter for a new line",
     });
   }
@@ -457,24 +457,24 @@ export class ChatView extends ItemView {
     if (!this.attachmentsEl) return;
 
     this.attachmentsEl.empty();
-    this.attachmentsEl.toggleClass("forge-hidden", this.attachments.length === 0);
+    this.attachmentsEl.toggleClass("nox-hidden", this.attachments.length === 0);
 
     for (const [index, attachment] of this.attachments.entries()) {
       const chip = this.attachmentsEl.createDiv({
-        cls: "forge-attachment-chip",
+        cls: "nox-attachment-chip",
       });
-      const attachmentIcon = chip.createSpan({ cls: "forge-attachment-icon" });
-      setForgeIcon(attachmentIcon, "file-text");
-      chip.createSpan({ cls: "forge-attachment-name", text: attachment.name });
+      const attachmentIcon = chip.createSpan({ cls: "nox-attachment-icon" });
+      setNoxIcon(attachmentIcon, "file-text");
+      chip.createSpan({ cls: "nox-attachment-name", text: attachment.name });
 
       const remove = chip.createEl("button", {
-        cls: "forge-attachment-remove",
+        cls: "nox-attachment-remove",
         attr: {
           type: "button",
           "aria-label": `Remove ${attachment.name}`,
         },
       });
-      setForgeIcon(remove, "x");
+      setNoxIcon(remove, "x");
       remove.addEventListener("click", () => {
         this.attachments.splice(index, 1);
         this.extraCtx = this.attachments.map((item) => item.ref);
@@ -587,7 +587,7 @@ export class ChatView extends ItemView {
     const requestId = ++this.promptMenuRequest;
     this.promptMenuEl.empty();
     this.promptMenuRows = [];
-    this.promptMenuEl.toggleClass("forge-hidden", this.promptMenu === null);
+    this.promptMenuEl.toggleClass("nox-hidden", this.promptMenu === null);
     this.promptPlusBtn?.setAttribute("aria-expanded", String(this.promptMenu !== null));
     if (!this.promptMenu) return;
 
@@ -600,14 +600,14 @@ export class ChatView extends ItemView {
     for (const item of rows) {
       const menuIndex = item.disabled ? -1 : interactiveIndex++;
       const button = this.promptMenuEl.createEl("button", {
-        cls: `forge-prompt-menu-row${menuIndex === this.promptMenuActive ? " is-active" : ""}`,
+        cls: `nox-prompt-menu-row${menuIndex === this.promptMenuActive ? " is-active" : ""}`,
         attr: { type: "button" },
       });
       button.disabled = Boolean(item.disabled);
-      const icon = button.createSpan({ cls: "forge-prompt-menu-icon" });
-      setForgeIcon(icon, item.icon);
-      button.createSpan({ cls: "forge-prompt-menu-name", text: item.name });
-      button.createSpan({ cls: "forge-prompt-menu-description", text: item.description });
+      const icon = button.createSpan({ cls: "nox-prompt-menu-icon" });
+      setNoxIcon(icon, item.icon);
+      button.createSpan({ cls: "nox-prompt-menu-name", text: item.name });
+      button.createSpan({ cls: "nox-prompt-menu-description", text: item.description });
 
       if (!item.disabled) {
         button.addEventListener("mouseenter", () => {
@@ -622,7 +622,7 @@ export class ChatView extends ItemView {
     }
 
     this.promptMenuEl.createDiv({
-      cls: "forge-prompt-menu-hint",
+      cls: "nox-prompt-menu-hint",
       text: this.promptMenu === "source"
         ? query ? "Select a note or attach a text file" : "Type @name to search vault notes"
         : "Choose a learning action",
@@ -704,20 +704,20 @@ export class ChatView extends ItemView {
     this.intentEl.empty();
 
     const visible = this.selectedAction !== "ask";
-    this.intentEl.toggleClass("forge-hidden", !visible);
+    this.intentEl.toggleClass("nox-hidden", !visible);
     if (!visible) return;
 
     const label = ACTIONS.find((item) => item.kind === this.selectedAction)?.label ?? this.selectedAction;
     const chip = this.intentEl.createDiv({
-      cls: `forge-intent-chip forge-intent-chip--${this.selectedAction}`,
+      cls: `nox-intent-chip nox-intent-chip--${this.selectedAction}`,
     });
-    chip.createSpan({ cls: "forge-intent-label", text: label });
+    chip.createSpan({ cls: "nox-intent-label", text: label });
 
     const remove = chip.createEl("button", {
-      cls: "forge-intent-remove",
+      cls: "nox-intent-remove",
       attr: { type: "button", "aria-label": `Exit ${label} mode` },
     });
-    setForgeIcon(remove, "x");
+    setNoxIcon(remove, "x");
     remove.addEventListener("click", () => {
       this.setAction("ask");
       this.input.focus();
@@ -741,17 +741,17 @@ export class ChatView extends ItemView {
   private async syncChips(): Promise<void> {
     const context = await this.learning.resolveContext(this.extraCtx);
     this.currentContext = context;
-    this.systemChip.addClass("forge-chip--hidden");
+    this.systemChip.addClass("nox-chip--hidden");
 
     const hasSelection = Boolean(context.selection);
-    this.selectionChip.toggleClass("forge-chip--hidden", !hasSelection);
+    this.selectionChip.toggleClass("nox-chip--hidden", !hasSelection);
 
     const activeNote = context.activeNote;
-    this.noteChip.toggleClass("forge-chip--hidden", !activeNote);
+    this.noteChip.toggleClass("nox-chip--hidden", !activeNote);
 
     if (activeNote) {
       const name = activeNote.path.split("/").pop() ?? activeNote.path;
-      const label = this.noteChip.querySelector<HTMLElement>(".forge-chip-label");
+      const label = this.noteChip.querySelector<HTMLElement>(".nox-chip-label");
       if (label) label.textContent = `@${name}`;
       this.noteChip.title = activeNote.path;
     }
@@ -854,10 +854,10 @@ export class ChatView extends ItemView {
       const message =
         err instanceof Error ? err.message : String(err);
 
-      console.warn("[Forge] Unexpected turn failure", message);
+      console.warn("[Nox] Unexpected turn failure", message);
       this.appendInlineError(
         this.thread,
-        "Forge hit an unexpected error. Try again.",
+        "Nox hit an unexpected error. Try again.",
       );
       this.setUIState("ANSWER");
     }
@@ -867,7 +867,7 @@ export class ChatView extends ItemView {
     if (event.type === "context-ready") {
       this.currentContext = event.context.resolved;
       this.systemContextFiles = event.context.system.map((item) => item.file);
-      this.systemChip.toggleClass("forge-chip--hidden", event.context.system.length === 0);
+      this.systemChip.toggleClass("nox-chip--hidden", event.context.system.length === 0);
       this.systemChip.title = this.systemContextFiles.join("\n");
       return;
     }
@@ -942,7 +942,7 @@ export class ChatView extends ItemView {
     this.settleThinking(doneLabel ?? `Completed in ${elapsed}`);
     if (this.responseTimeEl) this.responseTimeEl.textContent = `for ${elapsed}`;
     this.stopLoadingTimer();
-    this.agentCursorEl?.removeClass("forge-bubble--streaming");
+    this.agentCursorEl?.removeClass("nox-bubble--streaming");
     this.agentCursorEl = null;
     this.agentContentEl = null;
     this.statusEl = null;
@@ -959,18 +959,18 @@ export class ChatView extends ItemView {
     if (!this.thinkingLabelEl) return;
 
     this.thinkingLabelEl.textContent = doneLabel;
-    this.thinkingLabelEl.removeClass("forge-thinking-label--active");
-    this.thinkingLabelEl.addClass("forge-thinking-label--done");
+    this.thinkingLabelEl.removeClass("nox-thinking-label--active");
+    this.thinkingLabelEl.addClass("nox-thinking-label--done");
 
     for (const row of this.thinkingRows) {
-      row.removeClass("forge-hidden");
+      row.removeClass("nox-hidden");
       row.removeClass("is-active");
       row.addClass("is-done");
 
       const marker = row.firstElementChild as HTMLElement | null;
       if (marker) {
         marker.textContent = "✓";
-        marker.removeClass("forge-thinking-marker--spinner");
+        marker.removeClass("nox-thinking-marker--spinner");
       }
     }
 
@@ -1017,13 +1017,13 @@ export class ChatView extends ItemView {
       const done = index < visible - 1;
       const marker = row.firstElementChild as HTMLElement | null;
 
-      row.toggleClass("forge-hidden", index >= visible);
+      row.toggleClass("nox-hidden", index >= visible);
       row.toggleClass("is-active", active);
       row.toggleClass("is-done", done);
 
       if (marker) {
         marker.textContent = done ? "✓" : "";
-        marker.toggleClass("forge-thinking-marker--spinner", active);
+        marker.toggleClass("nox-thinking-marker--spinner", active);
       }
     });
   }
@@ -1070,7 +1070,7 @@ export class ChatView extends ItemView {
     this.input.disabled = busy || state === "ERROR";
     this.sendBtn.disabled =
       busy || state === "ERROR" || !this.canSend();
-    this.cancelBtn.toggleClass("forge-hidden", !busy);
+    this.cancelBtn.toggleClass("nox-hidden", !busy);
   }
 
   private canSend(): boolean {
@@ -1084,27 +1084,27 @@ export class ChatView extends ItemView {
     this.statusEl = null;
 
     const slate = this.thread.createDiv({
-      cls: "forge-empty-slate",
+      cls: "nox-empty-slate",
     });
     slate.createEl("img", {
-      cls: "forge-empty-logo",
+      cls: "nox-empty-logo",
       attr: {
         src: this.getLogoUrl(),
-        alt: "Forge",
+        alt: "Nox",
       },
     });
     const label = "What are you learning?";
 
     slate.createDiv({
-      cls: "forge-empty-label",
+      cls: "nox-empty-label",
       text: label,
     });
     slate.createDiv({
-      cls: "forge-empty-hint",
+      cls: "nox-empty-hint",
       text: "Ask about the current note, or jump into a focused workflow when you need more than chat.",
     });
 
-    const quickActions = slate.createDiv({ cls: "forge-empty-actions" });
+    const quickActions = slate.createDiv({ cls: "nox-empty-actions" });
     const quickActionMap: Array<[LearningActionKind, string]> = [
       ["explain", "Explain this"],
       ["practice", "Practice"],
@@ -1112,7 +1112,7 @@ export class ChatView extends ItemView {
     ];
     for (const [action, text] of quickActionMap) {
       const button = quickActions.createEl("button", {
-        cls: "forge-empty-action",
+        cls: "nox-empty-action",
         text,
         attr: { type: "button" },
       });
@@ -1151,18 +1151,18 @@ export class ChatView extends ItemView {
 
   private async appendRestoredAssistant(markdown: string): Promise<void> {
     const bubble = this.thread.createDiv({
-      cls: "forge-bubble forge-bubble--agent",
+      cls: "nox-bubble nox-bubble--agent",
     });
-    const meta = bubble.createDiv({ cls: "forge-response-meta" });
-    meta.createSpan({ cls: "forge-response-label", text: "Forge" });
-    meta.createSpan({ cls: "forge-response-sub", text: "Restored" });
+    const meta = bubble.createDiv({ cls: "nox-response-meta" });
+    meta.createSpan({ cls: "nox-response-label", text: "Nox" });
+    meta.createSpan({ cls: "nox-response-sub", text: "Restored" });
     const content = bubble.createDiv({
-      cls: "forge-bubble-content forge-markdown",
+      cls: "nox-bubble-content nox-markdown",
     });
     const sourcePath =
       this.currentContext?.selection?.file ??
       this.currentContext?.activeNote?.path ??
-      "Forge.md";
+      "Nox.md";
     await MarkdownRenderer.render(
       this.app,
       markdown,
@@ -1184,7 +1184,7 @@ export class ChatView extends ItemView {
       pending: "⚠ Expired after restart",
     };
     wrap.createDiv({
-      cls: `forge-result-badge forge-badge--${state === "applied" ? "applied" : state === "rejected" ? "rejected" : "stale"}`,
+      cls: `nox-result-badge nox-badge--${state === "applied" ? "applied" : state === "rejected" ? "rejected" : "stale"}`,
       text: labels[state],
     });
   }
@@ -1196,24 +1196,24 @@ export class ChatView extends ItemView {
     this.statusEl = null;
 
     const slate = this.thread.createDiv({
-      cls: "forge-error-slate",
+      cls: "nox-error-slate",
     });
     slate.createDiv({
-      cls: "forge-error-icon",
+      cls: "nox-error-icon",
       text: "⚠",
     });
     slate.createDiv({
-      cls: "forge-error-title",
-      text: "Forge unavailable",
+      cls: "nox-error-title",
+      text: "Nox unavailable",
     });
     slate.createDiv({
-      cls: "forge-error-body",
+      cls: "nox-error-body",
       text: message,
     });
 
     const button = slate.createEl("button", {
-      cls: "forge-configure-btn",
-      text: "Configure Forge →",
+      cls: "nox-configure-btn",
+      text: "Configure Nox →",
     });
     button.addEventListener("click", () => {
       this.openSettings();
@@ -1223,9 +1223,9 @@ export class ChatView extends ItemView {
   }
 
   private appendUserBubble(text: string): void {
-    this.thread.querySelector(".forge-empty-slate")?.remove();
+    this.thread.querySelector(".nox-empty-slate")?.remove();
     const bubble = this.thread.createDiv({
-      cls: "forge-bubble forge-bubble--user",
+      cls: "nox-bubble nox-bubble--user",
     });
     bubble.setText(text);
   }
@@ -1236,49 +1236,49 @@ export class ChatView extends ItemView {
     this.statusEl = this.buildThinkingTrace();
 
     this.agentCursorEl = this.thread.createDiv({
-      cls: "forge-bubble forge-bubble--agent forge-bubble--streaming",
+      cls: "nox-bubble nox-bubble--agent nox-bubble--streaming",
     });
-    const meta = this.agentCursorEl.createDiv({ cls: "forge-response-meta" });
-    meta.createSpan({ cls: "forge-response-label", text: "Forge" });
+    const meta = this.agentCursorEl.createDiv({ cls: "nox-response-meta" });
+    meta.createSpan({ cls: "nox-response-label", text: "Nox" });
     meta.createSpan({
-      cls: "forge-response-sub",
+      cls: "nox-response-sub",
       text: ACTIONS.find((action) => action.kind === this.selectedAction)?.label ?? "Response",
     });
-    this.responseTimeEl = meta.createSpan({ cls: "forge-response-time", text: "for 0.0s" });
+    this.responseTimeEl = meta.createSpan({ cls: "nox-response-time", text: "for 0.0s" });
     this.agentContentEl = this.agentCursorEl.createDiv({
-      cls: "forge-bubble-content",
+      cls: "nox-bubble-content",
     });
   }
 
   private buildThinkingTrace(): HTMLElement {
-    const trace = this.thread.createDiv({ cls: "forge-thinking" });
+    const trace = this.thread.createDiv({ cls: "nox-thinking" });
     trace.setAttribute("role", "status");
     trace.setAttribute("aria-live", "polite");
 
     const toggle = trace.createEl("button", {
-      cls: "forge-thinking-toggle",
+      cls: "nox-thinking-toggle",
       attr: { type: "button", "aria-expanded": "false" },
     });
     this.thinkingToggleEl = toggle;
 
     toggle.createEl("img", {
-      cls: "forge-thinking-logo",
+      cls: "nox-thinking-logo",
       attr: { src: this.getLogoUrl(), alt: "" },
     });
 
     this.thinkingLabelEl = toggle.createSpan({
-      cls: "forge-thinking-label forge-thinking-label--active",
+      cls: "nox-thinking-label nox-thinking-label--active",
       text: "Working",
     });
-    this.loadingElapsedEl = toggle.createSpan({ cls: "forge-thinking-elapsed" });
+    this.loadingElapsedEl = toggle.createSpan({ cls: "nox-thinking-elapsed" });
     this.loadingElapsedEl.setAttribute("aria-hidden", "true");
 
-    const chevron = toggle.createSpan({ cls: "forge-thinking-chevron", text: "⌄" });
+    const chevron = toggle.createSpan({ cls: "nox-thinking-chevron", text: "⌄" });
     this.thinkingChevronEl = chevron;
 
-    const panel = trace.createDiv({ cls: "forge-thinking-panel" });
+    const panel = trace.createDiv({ cls: "nox-thinking-panel" });
     this.thinkingPanelEl = panel;
-    const list = panel.createDiv({ cls: "forge-thinking-trace forge-thinking-trace--facts" });
+    const list = panel.createDiv({ cls: "nox-thinking-trace nox-thinking-trace--facts" });
 
     const source = this.currentContext?.selection?.file ?? this.currentContext?.activeNote?.path;
     const facts: Array<{ primary: string; secondary?: string }> = [
@@ -1295,10 +1295,10 @@ export class ChatView extends ItemView {
     ];
 
     this.thinkingRows = facts.map((fact) => {
-      const row = list.createDiv({ cls: "forge-thinking-row is-done" });
-      row.createSpan({ cls: "forge-thinking-marker", text: "·" });
-      row.createSpan({ cls: "forge-thinking-primary", text: fact.primary });
-      if (fact.secondary) row.createSpan({ cls: "forge-thinking-secondary", text: fact.secondary });
+      const row = list.createDiv({ cls: "nox-thinking-row is-done" });
+      row.createSpan({ cls: "nox-thinking-marker", text: "·" });
+      row.createSpan({ cls: "nox-thinking-primary", text: fact.primary });
+      if (fact.secondary) row.createSpan({ cls: "nox-thinking-secondary", text: fact.secondary });
       return row;
     });
 
@@ -1339,7 +1339,7 @@ export class ChatView extends ItemView {
       }
 
       this.agentContentEl.createSpan({
-        cls: "forge-stream-word",
+        cls: "nox-stream-word",
         text: part,
       });
     }
@@ -1351,7 +1351,7 @@ export class ChatView extends ItemView {
     if (!this.agentContentEl || !this.streamingPendingText) return;
 
     this.agentContentEl.createSpan({
-      cls: "forge-stream-word",
+      cls: "nox-stream-word",
       text: this.streamingPendingText,
     });
     this.streamingPendingText = "";
@@ -1365,15 +1365,15 @@ export class ChatView extends ItemView {
     const sourcePath =
       this.currentContext?.selection?.file ??
       this.currentContext?.activeNote?.path ??
-      "Forge.md";
+      "Nox.md";
 
     content.empty();
-    content.addClass("forge-markdown");
+    content.addClass("nox-markdown");
 
     void MarkdownRenderer.render(this.app, markdown, content, sourcePath, this).catch(() => {
       content.empty();
-      content.removeClass("forge-markdown");
-      content.addClass("forge-markdown-error");
+      content.removeClass("nox-markdown");
+      content.addClass("nox-markdown-error");
       content.setText("Markdown response could not be rendered.");
     });
   }
@@ -1383,10 +1383,10 @@ export class ChatView extends ItemView {
 
     const responseText = this.streamedResponseText.trim();
     const actions = this.agentCursorEl.createDiv({
-      cls: "forge-stream-actions",
+      cls: "nox-stream-actions",
     });
     const copyButton = actions.createEl("button", {
-      cls: "forge-stream-action",
+      cls: "nox-stream-action",
       text: "Copy",
       attr: {
         type: "button",
@@ -1414,20 +1414,20 @@ export class ChatView extends ItemView {
     if (!this.agentCursorEl) return;
 
     const card = this.agentCursorEl.createDiv({
-      cls: "forge-practice-card",
+      cls: "nox-practice-card",
     });
     card.createDiv({
-      cls: "forge-practice-label",
+      cls: "nox-practice-label",
       text: `Practice · ${question.concept}`,
     });
     card.createDiv({
-      cls: "forge-practice-question",
+      cls: "nox-practice-question",
       text: question.question,
     });
 
     if (question.hint) {
       card.createDiv({
-        cls: "forge-practice-hint",
+        cls: "nox-practice-hint",
         text: `Hint: ${question.hint}`,
       });
     }
@@ -1441,7 +1441,7 @@ export class ChatView extends ItemView {
     if (!this.agentCursorEl) return;
 
     const card = this.agentCursorEl.createDiv({
-      cls: `forge-practice-evaluation forge-outcome--${evaluation.outcome}`,
+      cls: `nox-practice-evaluation nox-outcome--${evaluation.outcome}`,
     });
 
     const outcomeLabel =
@@ -1452,26 +1452,26 @@ export class ChatView extends ItemView {
           : "Needs work";
 
     card.createDiv({
-      cls: "forge-practice-label",
+      cls: "nox-practice-label",
       text: `${outcomeLabel} · ${evaluation.concept}`,
     });
     card.createDiv({
-      cls: "forge-practice-feedback",
+      cls: "nox-practice-feedback",
       text: evaluation.feedback,
     });
 
     if (evaluation.misconceptions.length > 0) {
       const gaps = card.createDiv({
-        cls: "forge-practice-gaps",
+        cls: "nox-practice-gaps",
       });
       gaps.createDiv({
-        cls: "forge-practice-gaps-label",
+        cls: "nox-practice-gaps-label",
         text: "Gap",
       });
 
       for (const misconception of evaluation.misconceptions) {
         gaps.createDiv({
-          cls: "forge-practice-gap",
+          cls: "nox-practice-gap",
           text: misconception,
         });
       }
@@ -1483,9 +1483,9 @@ export class ChatView extends ItemView {
   private appendReviewFindings(findings: ReviewFinding[]): void {
     if (!this.agentCursorEl) return;
 
-    const wrap = this.agentCursorEl.createDiv({ cls: "forge-review" });
+    const wrap = this.agentCursorEl.createDiv({ cls: "nox-review" });
     wrap.createDiv({
-      cls: "forge-review-summary",
+      cls: "nox-review-summary",
       text: findings.length === 0
         ? "No material learning gaps found."
         : `${findings.length} important ${findings.length === 1 ? "gap" : "gaps"}`,
@@ -1493,15 +1493,15 @@ export class ChatView extends ItemView {
 
     for (const finding of findings) {
       const card = wrap.createDiv({
-        cls: `forge-review-card forge-review-card--${finding.kind}`,
+        cls: `nox-review-card nox-review-card--${finding.kind}`,
       });
-      card.createDiv({ cls: "forge-review-kind", text: finding.kind.replace("-", " ") });
-      card.createDiv({ cls: "forge-review-title", text: finding.title });
-      card.createDiv({ cls: "forge-review-detail", text: finding.detail });
+      card.createDiv({ cls: "nox-review-kind", text: finding.kind.replace("-", " ") });
+      card.createDiv({ cls: "nox-review-title", text: finding.title });
+      card.createDiv({ cls: "nox-review-detail", text: finding.detail });
 
-      const actions = card.createDiv({ cls: "forge-review-actions" });
+      const actions = card.createDiv({ cls: "nox-review-actions" });
       const practice = actions.createEl("button", {
-        cls: "forge-review-action",
+        cls: "nox-review-action",
         text: "Practice",
         attr: { type: "button" },
       });
@@ -1513,7 +1513,7 @@ export class ChatView extends ItemView {
       });
 
       const fix = actions.createEl("button", {
-        cls: "forge-review-action",
+        cls: "nox-review-action",
         text: "Fix",
         attr: { type: "button" },
       });
@@ -1534,11 +1534,11 @@ export class ChatView extends ItemView {
   ): void {
     if (!topic) return;
     const open = gaps.filter((gap) => gap.status === "open").length;
-    const row = this.thread.createDiv({ cls: "forge-progress-row" });
-    const mark = row.createSpan({ cls: "forge-progress-mark" });
-    setForgeIcon(mark, "check");
+    const row = this.thread.createDiv({ cls: "nox-progress-row" });
+    const mark = row.createSpan({ cls: "nox-progress-mark" });
+    setNoxIcon(mark, "check");
     row.createSpan({
-      cls: "forge-progress-text",
+      cls: "nox-progress-text",
       text: open > 0
         ? `Learning state updated · ${open} open ${open === 1 ? "gap" : "gaps"}`
         : "Learning state updated",
@@ -1550,16 +1550,16 @@ export class ChatView extends ItemView {
     const wrap = this.renderProposal(proposal);
 
     const actions = wrap.createDiv({
-      cls: "forge-proposal-actions",
+      cls: "nox-proposal-actions",
     });
 
     const rejectBtn = actions.createEl("button", {
-      cls: "forge-btn-reject",
+      cls: "nox-btn-reject",
       text: "Reject",
     });
 
     const applyBtn = actions.createEl("button", {
-      cls: "forge-btn-apply",
+      cls: "nox-btn-apply",
       text: "Apply ✓",
     });
 
@@ -1567,7 +1567,7 @@ export class ChatView extends ItemView {
       void this.learning.rejectProposal(edit.id);
       actions.remove();
       wrap.createDiv({
-        cls: "forge-result-badge forge-badge--rejected",
+        cls: "nox-result-badge nox-badge--rejected",
         text: "✕ Rejected",
       });
       this.setUIState("ANSWER");
@@ -1582,13 +1582,13 @@ export class ChatView extends ItemView {
 
       if (result.ok) {
         wrap.createDiv({
-          cls: "forge-result-badge forge-badge--applied",
+          cls: "nox-result-badge nox-badge--applied",
           text: "✓ Applied to " + proposal.file,
         });
         this.setUIState("APPLIED");
       } else {
         wrap.createDiv({
-          cls: "forge-result-badge forge-badge--stale",
+          cls: "nox-result-badge nox-badge--stale",
           text: "⚠ " + result.message,
         });
         this.setUIState("ANSWER");
@@ -1599,20 +1599,20 @@ export class ChatView extends ItemView {
   }
 
   private renderProposal(proposal: EditProposal): HTMLElement {
-    const wrap = this.thread.createDiv({ cls: "forge-proposal" });
+    const wrap = this.thread.createDiv({ cls: "nox-proposal" });
     wrap.createDiv({
-      cls: "forge-proposal-badge",
+      cls: "nox-proposal-badge",
       text: "📄 " + proposal.file,
     });
     if (proposal.reason) {
-      wrap.createDiv({ cls: "forge-proposal-reason", text: proposal.reason });
+      wrap.createDiv({ cls: "nox-proposal-reason", text: proposal.reason });
     }
-    const diff = wrap.createDiv({ cls: "forge-proposal-diff" });
+    const diff = wrap.createDiv({ cls: "nox-proposal-diff" });
     proposal.original.split("\n").forEach((line) => {
-      diff.createDiv({ cls: "forge-diff-removed", text: "- " + line });
+      diff.createDiv({ cls: "nox-diff-removed", text: "- " + line });
     });
     proposal.replacement.split("\n").forEach((line) => {
-      diff.createDiv({ cls: "forge-diff-added", text: "+ " + line });
+      diff.createDiv({ cls: "nox-diff-added", text: "+ " + line });
     });
     return wrap;
   }
@@ -1622,7 +1622,7 @@ export class ChatView extends ItemView {
     message: string,
   ): void {
     parent.createDiv({
-      cls: "forge-inline-error",
+      cls: "nox-inline-error",
       text: "⚠ " + message,
     });
     this.scrollThread();

@@ -3,101 +3,101 @@
 @source "./src";
 
 @theme inline {
-  --color-forge-page: var(--forge-page);
-  --color-forge-canvas: var(--forge-canvas);
-  --color-forge-surface: var(--forge-surface);
-  --color-forge-inset: var(--forge-inset);
-  --color-forge-hover: var(--forge-hover);
-  --color-forge-ink: var(--forge-ink);
-  --color-forge-ink-2: var(--forge-ink-2);
-  --color-forge-ink-3: var(--forge-ink-3);
-  --color-forge-line: var(--forge-line);
-  --color-forge-line-strong: var(--forge-line-strong);
-  --color-forge-accent: var(--forge-accent);
-  --color-forge-accent-tint: var(--forge-accent-tint);
-  --radius-forge-chip: 6px;
-  --radius-forge-control: 8px;
-  --radius-forge-card: 10px;
-  --radius-forge-window: 14px;
+  --color-nox-page: var(--nox-page);
+  --color-nox-canvas: var(--nox-canvas);
+  --color-nox-surface: var(--nox-surface);
+  --color-nox-inset: var(--nox-inset);
+  --color-nox-hover: var(--nox-hover);
+  --color-nox-ink: var(--nox-ink);
+  --color-nox-ink-2: var(--nox-ink-2);
+  --color-nox-ink-3: var(--nox-ink-3);
+  --color-nox-line: var(--nox-line);
+  --color-nox-line-strong: var(--nox-line-strong);
+  --color-nox-accent: var(--nox-accent);
+  --color-nox-accent-tint: var(--nox-accent-tint);
+  --radius-nox-chip: 6px;
+  --radius-nox-control: 8px;
+  --radius-nox-card: 10px;
+  --radius-nox-window: 14px;
 }
 
-.forge-root,
-.forge-root * {
+.nox-root,
+.nox-root * {
   box-sizing: border-box;
 }
 
-.forge-root {
+.nox-root {
   @apply flex h-full min-h-0 flex-col overflow-hidden;
-  --forge-page: oklch(0.995 0.001 286.376);
-  --forge-canvas: oklch(0.976 0.012 286.376);
-  --forge-surface: oklch(1 0 0);
-  --forge-inset: oklch(0.985 0.008 286.376);
-  --forge-hover: oklch(0.968 0.02 286.376);
-  --forge-hover-2: oklch(0.944 0.035 286.376);
-  --forge-ink: oklch(0.275 0.03 286.376);
-  --forge-ink-2: oklch(0.49 0.025 286.376);
-  --forge-ink-3: oklch(0.66 0.02 286.376);
-  --forge-line: oklch(0.925 0.012 286.376);
-  --forge-line-strong: oklch(0.86 0.018 286.376);
-  --forge-line-soft: oklch(0.95 0.008 286.376);
-  --forge-field: oklch(0.982 0.008 286.376);
-  --forge-accent: oklch(0.57 0.22 292);
-  --forge-accent-ink: oklch(0.48 0.18 292);
-  --forge-accent-soft: oklch(0.95 0.035 292);
-  --forge-accent-border: oklch(0.82 0.12 292);
-  --forge-accent-tint: var(--forge-accent-soft);
-  --forge-green: var(--color-green, #34c759);
-  --forge-orange: var(--text-warning, #ff9f0a);
-  --forge-red: var(--text-error, #ff3b30);
-  --forge-radius-chip: 6px;
-  --forge-radius-control: 8px;
-  --forge-radius-card: 10px;
-  --forge-radius-window: 14px;
-  --forge-radius-pill: 999px;
-  --forge-ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
-  --forge-ease-link: cubic-bezier(0.16, 1, 0.3, 1);
+  --nox-page: oklch(0.995 0.001 286.376);
+  --nox-canvas: oklch(0.976 0.012 286.376);
+  --nox-surface: oklch(1 0 0);
+  --nox-inset: oklch(0.985 0.008 286.376);
+  --nox-hover: oklch(0.968 0.02 286.376);
+  --nox-hover-2: oklch(0.944 0.035 286.376);
+  --nox-ink: oklch(0.275 0.03 286.376);
+  --nox-ink-2: oklch(0.49 0.025 286.376);
+  --nox-ink-3: oklch(0.66 0.02 286.376);
+  --nox-line: oklch(0.925 0.012 286.376);
+  --nox-line-strong: oklch(0.86 0.018 286.376);
+  --nox-line-soft: oklch(0.95 0.008 286.376);
+  --nox-field: oklch(0.982 0.008 286.376);
+  --nox-accent: oklch(0.57 0.22 292);
+  --nox-accent-ink: oklch(0.48 0.18 292);
+  --nox-accent-soft: oklch(0.95 0.035 292);
+  --nox-accent-border: oklch(0.82 0.12 292);
+  --nox-accent-tint: var(--nox-accent-soft);
+  --nox-green: var(--color-green, #34c759);
+  --nox-orange: var(--text-warning, #ff9f0a);
+  --nox-red: var(--text-error, #ff3b30);
+  --nox-radius-chip: 6px;
+  --nox-radius-control: 8px;
+  --nox-radius-card: 10px;
+  --nox-radius-window: 14px;
+  --nox-radius-pill: 999px;
+  --nox-ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --nox-ease-link: cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--forge-page);
-  color: var(--forge-ink);
+  background: var(--nox-page);
+  color: var(--nox-ink);
   font-family: var(--font-interface, Inter, ui-sans-serif, system-ui, sans-serif);
   font-size: 14px;
   letter-spacing: -0.01em;
 }
 
-.theme-dark .forge-root {
-  --forge-page: oklch(0.205 0.02 286.376);
-  --forge-canvas: oklch(0.23 0.025 286.376);
-  --forge-surface: oklch(0.26 0.03 286.376);
-  --forge-inset: oklch(0.24 0.025 286.376);
-  --forge-hover: oklch(0.29 0.035 286.376);
-  --forge-hover-2: oklch(0.33 0.04 286.376);
-  --forge-ink: oklch(0.96 0.015 286.376);
-  --forge-ink-2: oklch(0.74 0.02 286.376);
-  --forge-ink-3: oklch(0.56 0.02 286.376);
-  --forge-line: oklch(0.32 0.025 286.376);
-  --forge-line-strong: oklch(0.4 0.03 286.376);
-  --forge-line-soft: oklch(0.29 0.02 286.376);
-  --forge-field: oklch(0.24 0.025 286.376);
-  --forge-accent: oklch(0.71 0.19 292);
-  --forge-accent-ink: oklch(0.78 0.15 292);
-  --forge-accent-soft: oklch(0.32 0.07 292);
-  --forge-accent-border: oklch(0.52 0.13 292);
+.theme-dark .nox-root {
+  --nox-page: oklch(0.205 0.02 286.376);
+  --nox-canvas: oklch(0.23 0.025 286.376);
+  --nox-surface: oklch(0.26 0.03 286.376);
+  --nox-inset: oklch(0.24 0.025 286.376);
+  --nox-hover: oklch(0.29 0.035 286.376);
+  --nox-hover-2: oklch(0.33 0.04 286.376);
+  --nox-ink: oklch(0.96 0.015 286.376);
+  --nox-ink-2: oklch(0.74 0.02 286.376);
+  --nox-ink-3: oklch(0.56 0.02 286.376);
+  --nox-line: oklch(0.32 0.025 286.376);
+  --nox-line-strong: oklch(0.4 0.03 286.376);
+  --nox-line-soft: oklch(0.29 0.02 286.376);
+  --nox-field: oklch(0.24 0.025 286.376);
+  --nox-accent: oklch(0.71 0.19 292);
+  --nox-accent-ink: oklch(0.78 0.15 292);
+  --nox-accent-soft: oklch(0.32 0.07 292);
+  --nox-accent-border: oklch(0.52 0.13 292);
 }
 
-.forge-root :focus-visible {
-  outline: 2px solid var(--forge-accent);
+.nox-root :focus-visible {
+  outline: 2px solid var(--nox-accent);
   outline-offset: 2px;
 }
 
-.forge-root .forge-input:focus-visible {
+.nox-root .nox-input:focus-visible {
   outline: none;
 }
 
-.forge-header {
+.nox-header {
   @apply flex shrink-0 flex-col;
   display: flex;
   flex-direction: column;
@@ -106,12 +106,12 @@
   gap: 10px;
   min-height: 88px;
   padding: 8px 10px 7px;
-  border-bottom: 1px solid var(--forge-line);
-  background: var(--forge-surface);
+  border-bottom: 1px solid var(--nox-line);
+  background: var(--nox-surface);
   flex-shrink: 0;
 }
 
-.forge-header-top {
+.nox-header-top {
   @apply flex w-full min-w-0 items-center justify-between;
   display: flex;
   align-items: center;
@@ -121,40 +121,40 @@
   min-width: 0;
 }
 
-.forge-header-brand,
-.forge-header-right,
-.forge-context-row,
-.forge-composer-controls,
-.forge-composer-footer,
-.forge-btn-group {
+.nox-header-brand,
+.nox-header-right,
+.nox-context-row,
+.nox-composer-controls,
+.nox-composer-footer,
+.nox-btn-group {
   display: flex;
   align-items: center;
 }
 
-.forge-header-brand {
+.nox-header-brand {
   min-width: 0;
   gap: 8px;
 }
 
-.forge-header-logo {
+.nox-header-logo {
   display: block;
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
   object-fit: cover;
 }
 
-.forge-header-copy {
+.nox-header-copy {
   display: flex;
   flex-direction: column;
   min-width: 0;
   gap: 1px;
 }
 
-.forge-header-title {
+.nox-header-title {
   overflow: hidden;
-  color: var(--forge-ink);
+  color: var(--nox-ink);
   font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -162,21 +162,21 @@
   white-space: nowrap;
 }
 
-.forge-header-subtitle {
-  color: var(--forge-ink-3);
+.nox-header-subtitle {
+  color: var(--nox-ink-3);
   font-size: 10px;
   letter-spacing: 0.08em;
   line-height: 1.1;
   text-transform: uppercase;
 }
 
-.forge-header-right {
+.nox-header-right {
   min-width: 0;
   gap: 6px;
   margin-left: auto;
 }
 
-.forge-mode-tabs {
+.nox-mode-tabs {
   @apply flex w-full max-w-full gap-1 overflow-x-auto rounded-[10px] p-[3px];
   display: flex;
   gap: 3px;
@@ -184,41 +184,41 @@
   max-width: 100%;
   overflow-x: auto;
   padding: 3px;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-card);
-  background: var(--forge-canvas);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-card);
+  background: var(--nox-canvas);
   scrollbar-width: none;
 }
 
-.forge-mode-tabs::-webkit-scrollbar {
+.nox-mode-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.forge-model-select {
+.nox-model-select {
   min-width: 0;
   max-width: 178px;
   height: 29px;
   padding: 3px 25px 3px 8px;
   overflow: hidden;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-control);
-  background: var(--forge-field);
-  color: var(--forge-ink-2);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-control);
+  background: var(--nox-field);
+  color: var(--nox-ink-2);
   cursor: pointer;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.forge-model-select:hover,
-.forge-model-select:focus {
-  border-color: var(--forge-accent-border);
-  color: var(--forge-ink);
+.nox-model-select:hover,
+.nox-model-select:focus {
+  border-color: var(--nox-accent-border);
+  color: var(--nox-ink);
 }
 
-.forge-new-btn,
-.forge-send-btn,
-.forge-cancel-btn {
+.nox-new-btn,
+.nox-send-btn,
+.nox-cancel-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -228,24 +228,24 @@
   cursor: pointer;
 }
 
-.forge-new-btn {
+.nox-new-btn {
   width: 29px;
   height: 29px;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-control);
-  background: var(--forge-field);
-  color: var(--forge-ink-2);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-control);
+  background: var(--nox-field);
+  color: var(--nox-ink-2);
   font-size: 19px;
   line-height: 1;
 }
 
-.forge-new-btn:hover,
-.forge-new-btn:focus-visible {
-  border-color: var(--forge-accent-border);
-  color: var(--forge-accent);
+.nox-new-btn:hover,
+.nox-new-btn:focus-visible {
+  border-color: var(--nox-accent-border);
+  color: var(--nox-accent);
 }
 
-.forge-thread {
+.nox-thread {
   @apply flex min-h-0 flex-1 flex-col overflow-y-auto;
   display: flex;
   flex: 1;
@@ -254,24 +254,24 @@
   gap: 12px;
   overflow-y: auto;
   padding: 16px 14px 20px;
-  background: var(--forge-canvas);
+  background: var(--nox-canvas);
   scroll-behavior: smooth;
   scrollbar-gutter: stable;
 }
 
-.forge-thread::-webkit-scrollbar {
+.nox-thread::-webkit-scrollbar {
   width: 8px;
 }
 
-.forge-thread::-webkit-scrollbar-thumb {
+.nox-thread::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
-  border-radius: var(--forge-radius-control);
-  background: var(--forge-line);
+  border-radius: var(--nox-radius-control);
+  background: var(--nox-line);
   background-clip: padding-box;
 }
 
-.forge-empty-slate,
-.forge-error-slate {
+.nox-empty-slate,
+.nox-error-slate {
   display: flex;
   flex: 1;
   min-height: 220px;
@@ -283,130 +283,130 @@
   text-align: center;
 }
 
-.forge-empty-logo {
+.nox-empty-logo {
   display: block;
   width: 42px;
   height: 42px;
   margin-bottom: 4px;
-  border: 1px solid var(--forge-accent-border);
-  border-radius: var(--forge-radius-window);
+  border: 1px solid var(--nox-accent-border);
+  border-radius: var(--nox-radius-window);
   object-fit: cover;
 }
 
-.forge-empty-kicker {
-  color: var(--forge-accent);
+.nox-empty-kicker {
+  color: var(--nox-accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.13em;
 }
 
-.forge-empty-label {
+.nox-empty-label {
   max-width: 300px;
-  color: var(--forge-ink);
+  color: var(--nox-ink);
   font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
 }
 
-.forge-empty-hint {
+.nox-empty-hint {
   max-width: 280px;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.forge-error-icon {
-  color: var(--forge-red);
+.nox-error-icon {
+  color: var(--nox-red);
   font-size: 28px;
 }
 
-.forge-error-title {
-  color: var(--forge-red);
+.nox-error-title {
+  color: var(--nox-red);
   font-size: 14px;
   font-weight: 650;
 }
 
-.forge-error-body {
+.nox-error-body {
   max-width: 320px;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.forge-configure-btn {
+.nox-configure-btn {
   margin-top: 4px;
   padding: 7px 13px;
-  border: 1px solid var(--forge-red);
-  border-radius: var(--forge-radius-control);
+  border: 1px solid var(--nox-red);
+  border-radius: var(--nox-radius-control);
   background: transparent;
-  color: var(--forge-red);
+  color: var(--nox-red);
   cursor: pointer;
   font-size: 12px;
 }
 
-.forge-configure-btn:hover,
-.forge-configure-btn:focus-visible {
+.nox-configure-btn:hover,
+.nox-configure-btn:focus-visible {
   background: rgba(var(--color-red-rgb, 255, 59, 48), 0.08);
 }
 
-.forge-bubble {
+.nox-bubble {
   max-width: 100%;
   padding: 10px 12px;
-  border-radius: var(--forge-radius-card);
+  border-radius: var(--nox-radius-card);
   font-size: var(--font-ui-small, 13px);
   line-height: 1.6;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.forge-bubble--user {
+.nox-bubble--user {
   align-self: flex-end;
   max-width: 82%;
-  border-radius: var(--forge-radius-card) var(--forge-radius-card) var(--forge-radius-chip) var(--forge-radius-card);
-  background: var(--forge-accent);
+  border-radius: var(--nox-radius-card) var(--nox-radius-card) var(--nox-radius-chip) var(--nox-radius-card);
+  background: var(--nox-accent);
   color: var(--text-on-accent);
 }
 
-.forge-bubble--agent {
+.nox-bubble--agent {
   align-self: flex-start;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-card) var(--forge-radius-card) var(--forge-radius-card) var(--forge-radius-chip);
-  background: var(--forge-surface);
-  color: var(--forge-ink);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-card) var(--nox-radius-card) var(--nox-radius-card) var(--nox-radius-chip);
+  background: var(--nox-surface);
+  color: var(--nox-ink);
 }
 
-.forge-response-meta {
+.nox-response-meta {
   display: flex;
   align-items: center;
   gap: 5px;
   margin-bottom: 6px;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   font-size: 11px;
   line-height: 1.3;
 }
 
-.forge-response-label {
-  color: var(--forge-ink);
+.nox-response-label {
+  color: var(--nox-ink);
   font-weight: 650;
 }
 
-.forge-response-sub {
-  color: var(--forge-ink-2);
+.nox-response-sub {
+  color: var(--nox-ink-2);
 }
 
-.forge-response-time {
-  color: var(--forge-ink);
+.nox-response-time {
+  color: var(--nox-ink);
 }
 
-.forge-response-label,
-.forge-response-sub,
-.forge-response-time {
+.nox-response-label,
+.nox-response-sub,
+.nox-response-time {
   white-space: nowrap;
 }
 
-.forge-bubble-label {
+.nox-bubble-label {
   margin-bottom: 5px;
-  color: var(--forge-accent);
+  color: var(--nox-accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -414,71 +414,71 @@
   text-transform: uppercase;
 }
 
-.forge-bubble-content {
+.nox-bubble-content {
   display: block;
 }
 
-.forge-bubble-content.forge-markdown {
+.nox-bubble-content.nox-markdown {
   @apply whitespace-normal;
-  color: var(--forge-ink);
+  color: var(--nox-ink);
   line-height: 1.6;
 }
 
-.forge-markdown-error {
-  color: var(--forge-red);
+.nox-markdown-error {
+  color: var(--nox-red);
   font-size: 12px;
 }
 
-.forge-markdown > :first-child {
+.nox-markdown > :first-child {
   margin-top: 0;
 }
 
-.forge-markdown > :last-child {
+.nox-markdown > :last-child {
   margin-bottom: 0;
 }
 
-.forge-markdown p {
+.nox-markdown p {
   margin: 0.65em 0;
 }
 
-.forge-markdown h1,
-.forge-markdown h2,
-.forge-markdown h3,
-.forge-markdown h4 {
+.nox-markdown h1,
+.nox-markdown h2,
+.nox-markdown h3,
+.nox-markdown h4 {
   margin: 1em 0 0.45em;
-  color: var(--forge-ink);
+  color: var(--nox-ink);
   font-weight: 650;
   line-height: 1.3;
 }
 
-.forge-markdown h1 { font-size: 1.25em; }
-.forge-markdown h2 { font-size: 1.15em; }
-.forge-markdown h3,
-.forge-markdown h4 { font-size: 1.05em; }
+.nox-markdown h1 { font-size: 1.25em; }
+.nox-markdown h2 { font-size: 1.15em; }
+.nox-markdown h3,
+.nox-markdown h4 { font-size: 1.05em; }
 
-.forge-markdown ul,
-.forge-markdown ol {
+.nox-markdown ul,
+.nox-markdown ol {
   margin: 0.65em 0;
   padding-left: 1.5em;
 }
 
-.forge-markdown li + li {
+.nox-markdown li + li {
   margin-top: 0.25em;
 }
 
-.forge-markdown blockquote {
+.nox-markdown blockquote {
   margin: 0.75em 0;
   padding: 0.1em 0 0.1em 0.9em;
-  border-left: 2px solid var(--forge-accent);
-  color: var(--forge-ink-2);
+  border-left: 2px solid var(--nox-accent);
+  color: var(--nox-ink-2);
 }
 
-.forge-markdown pre {
+.nox-markdown pre {
   margin: 0.8em 0;
   overflow-x: auto;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-control);
-  background: var(--code-background, var(--forge-inset));
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-control);
+  background: var(--code-background, var(--nox-inset));
   padding: 10px;
   font-family: var(--font-monospace);
   font-size: 0.88em;
@@ -486,34 +486,34 @@
   white-space: pre;
 }
 
-.forge-markdown code {
-  border-radius: var(--forge-radius-chip);
-  background: var(--code-background, var(--forge-inset));
+.nox-markdown code {
+  border-radius: var(--nox-radius-chip);
+  background: var(--code-background, var(--nox-inset));
   padding: 0.12em 0.3em;
   font-family: var(--font-monospace);
   font-size: 0.9em;
 }
 
-.forge-markdown pre code {
+.nox-markdown pre code {
   background: transparent;
   padding: 0;
   font-size: inherit;
 }
 
-.forge-markdown a {
+.nox-markdown a {
   color: var(--link-color);
   text-decoration: underline;
   text-decoration-color: var(--link-decoration-color);
   text-underline-offset: 2px;
 }
 
-.forge-markdown hr {
+.nox-markdown hr {
   margin: 1em 0;
   border: 0;
-  border-top: 1px solid var(--forge-line);
+  border-top: 1px solid var(--nox-line);
 }
 
-.forge-markdown table {
+.nox-markdown table {
   display: block;
   max-width: 100%;
   margin: 0.8em 0;
@@ -522,67 +522,67 @@
   font-size: 0.92em;
 }
 
-.forge-markdown th,
-.forge-markdown td {
-  border: 1px solid var(--forge-line);
+.nox-markdown th,
+.nox-markdown td {
+  border: 1px solid var(--nox-line);
   padding: 6px 10px;
   text-align: left;
 }
 
-.forge-markdown th {
-  background: var(--forge-inset);
-  color: var(--forge-ink);
+.nox-markdown th {
+  background: var(--nox-inset);
+  color: var(--nox-ink);
   font-weight: 650;
 }
 
-.forge-stream-word {
+.nox-stream-word {
   display: inline;
   opacity: 0.2;
   filter: blur(3px);
-  animation: forge-stream-word-resolve 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: nox-stream-word-resolve 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.forge-stream-actions {
+.nox-stream-actions {
   display: flex;
   align-items: center;
   gap: 3px;
   margin-top: 9px;
   padding-top: 7px;
-  border-top: 1px solid var(--forge-line);
-  animation: forge-stream-actions-in 300ms ease-out both;
+  border-top: 1px solid var(--nox-line);
+  animation: nox-stream-actions-in 300ms ease-out both;
   white-space: normal;
 }
 
-.forge-stream-action {
+.nox-stream-action {
   min-height: 25px;
   padding: 3px 8px;
   border: 0;
-  border-radius: var(--forge-radius-chip);
+  border-radius: var(--nox-radius-chip);
   background: transparent;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   cursor: pointer;
   font-size: 11px;
   box-shadow: none;
 }
 
-.forge-stream-action:hover,
-.forge-stream-action:focus-visible {
-  background: var(--forge-hover);
-  color: var(--forge-ink);
+.nox-stream-action:hover,
+.nox-stream-action:focus-visible {
+  background: var(--nox-hover);
+  color: var(--nox-ink);
 }
 
-.forge-bubble--streaming::after {
-  color: var(--forge-accent);
+.nox-bubble--streaming::after {
+  color: var(--nox-accent);
   content: "▋";
-  animation: forge-blink 0.8s step-end infinite;
+  animation: nox-blink 0.8s step-end infinite;
 }
 
-.forge-thinking {
+.nox-thinking {
   width: 100%;
   max-width: 380px;
 }
 
-.forge-thinking-toggle {
+.nox-thinking-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -591,19 +591,19 @@
   margin-left: -6px;
   padding: 4px 6px;
   border: 0;
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
   background: transparent;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   cursor: pointer;
   box-shadow: none;
 }
 
-.forge-thinking-toggle:hover,
-.forge-thinking-toggle:focus-visible {
-  background: var(--forge-hover);
+.nox-thinking-toggle:hover,
+.nox-thinking-toggle:focus-visible {
+  background: var(--nox-hover);
 }
 
-.forge-thinking-logo {
+.nox-thinking-logo {
   display: block;
   width: 16px;
   height: 16px;
@@ -612,7 +612,7 @@
   object-fit: cover;
 }
 
-.forge-thinking-label {
+.nox-thinking-label {
   overflow: hidden;
   font-size: 13px;
   font-weight: 550;
@@ -621,36 +621,36 @@
   white-space: nowrap;
 }
 
-.forge-thinking-label--active {
-  color: var(--forge-ink-2);
-  animation: forge-thinking-pulse 1.4s ease-in-out infinite;
+.nox-thinking-label--active {
+  color: var(--nox-ink-2);
+  animation: nox-thinking-pulse 1.4s ease-in-out infinite;
 }
 
-.forge-thinking-label--done {
-  color: var(--forge-ink-2);
+.nox-thinking-label--done {
+  color: var(--nox-ink-2);
 }
 
-.forge-thinking-elapsed {
-  color: var(--forge-ink-3);
+.nox-thinking-elapsed {
+  color: var(--nox-ink-3);
   font-family: var(--font-monospace);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.forge-thinking-chevron {
-  color: var(--forge-ink-3);
+.nox-thinking-chevron {
+  color: var(--nox-ink-3);
   font-size: 16px;
   line-height: 1;
   transform: rotate(0deg);
   transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.forge-thinking-chevron.is-expanded {
+.nox-thinking-chevron.is-expanded {
   transform: rotate(180deg);
 }
 
-.forge-thinking-panel {
+.nox-thinking-panel {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
@@ -659,12 +659,12 @@
     opacity 250ms ease;
 }
 
-.forge-thinking-panel.is-expanded {
+.nox-thinking-panel.is-expanded {
   grid-template-rows: 1fr;
   opacity: 1;
 }
 
-.forge-thinking-trace {
+.nox-thinking-trace {
   position: relative;
   display: flex;
   min-height: 0;
@@ -675,58 +675,58 @@
   overflow: hidden;
 }
 
-.forge-thinking-trace::before {
+.nox-thinking-trace::before {
   position: absolute;
   top: -5px;
   bottom: 0;
   left: 3px;
   width: 1px;
-  background: var(--forge-line);
+  background: var(--nox-line);
   content: "";
 }
 
-.forge-thinking-row {
+.nox-thinking-row {
   display: flex;
   align-items: center;
   width: 100%;
   min-height: 28px;
   gap: 8px;
   padding: 2px 6px;
-  border-radius: var(--forge-radius-chip);
-  color: var(--forge-ink-2);
-  animation: forge-thinking-fade-up 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  border-radius: var(--nox-radius-chip);
+  color: var(--nox-ink-2);
+  animation: nox-thinking-fade-up 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.forge-thinking-row.is-active {
-  background: var(--forge-hover);
-  color: var(--forge-ink);
+.nox-thinking-row.is-active {
+  background: var(--nox-hover);
+  color: var(--nox-ink);
 }
 
-.forge-thinking-row.is-done {
-  color: var(--forge-ink-2);
+.nox-thinking-row.is-done {
+  color: var(--nox-ink-2);
 }
 
-.forge-thinking-marker {
+.nox-thinking-marker {
   display: inline-flex;
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: var(--forge-ink-3);
+  color: var(--nox-ink-3);
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
 
-.forge-thinking-marker--spinner {
-  border: 1.5px solid var(--forge-line);
-  border-top-color: var(--forge-ink);
+.nox-thinking-marker--spinner {
+  border: 1.5px solid var(--nox-line);
+  border-top-color: var(--nox-ink);
   border-radius: 50%;
-  animation: forge-thinking-spin 700ms linear infinite;
+  animation: nox-thinking-spin 700ms linear infinite;
 }
 
-.forge-thinking-primary {
+.nox-thinking-primary {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -737,252 +737,252 @@
   white-space: nowrap;
 }
 
-.forge-thinking-secondary {
+.nox-thinking-secondary {
   flex: 0 0 auto;
   max-width: 45%;
   overflow: hidden;
-  color: var(--forge-ink-3);
+  color: var(--nox-ink-3);
   font-family: var(--font-monospace);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.forge-inline-error {
+.nox-inline-error {
   padding: 8px 10px;
   border: 1px solid rgba(var(--color-red-rgb, 255, 59, 48), 0.2);
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
   background: rgba(var(--color-red-rgb, 255, 59, 48), 0.06);
-  color: var(--forge-red);
+  color: var(--nox-red);
   font-size: 12px;
   line-height: 1.45;
 }
 
-.forge-practice-card,
-.forge-practice-evaluation {
+.nox-practice-card,
+.nox-practice-evaluation {
   margin-top: 10px;
   padding: 10px;
-  border: 1px solid var(--forge-accent-border);
-  border-radius: var(--forge-radius-card);
-  background: var(--forge-accent-tint);
+  border: 1px solid var(--nox-accent-border);
+  border-radius: var(--nox-radius-card);
+  background: var(--nox-accent-tint);
 }
 
-.forge-practice-evaluation {
-  border-color: var(--forge-line);
-  background: var(--forge-surface);
+.nox-practice-evaluation {
+  border-color: var(--nox-line);
+  background: var(--nox-surface);
 }
 
-.forge-practice-label,
-.forge-practice-gaps-label {
-  color: var(--forge-accent);
+.nox-practice-label,
+.nox-practice-gaps-label {
+  color: var(--nox-accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.forge-practice-question,
-.forge-practice-feedback {
+.nox-practice-question,
+.nox-practice-feedback {
   margin-top: 6px;
-  color: var(--forge-ink);
+  color: var(--nox-ink);
   font-size: 13px;
   line-height: 1.5;
 }
 
-.forge-practice-hint {
+.nox-practice-hint {
   margin-top: 7px;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   font-size: 11px;
   font-style: italic;
 }
 
-.forge-practice-gaps {
+.nox-practice-gaps {
   margin-top: 10px;
   padding-top: 9px;
-  border-top: 1px solid var(--forge-line);
+  border-top: 1px solid var(--nox-line);
 }
 
-.forge-practice-gap {
+.nox-practice-gap {
   margin-top: 4px;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   font-size: 11px;
   line-height: 1.4;
 }
 
-.forge-practice-gap::before {
+.nox-practice-gap::before {
   margin-right: 5px;
-  color: var(--forge-orange);
+  color: var(--nox-orange);
   content: "•";
 }
 
-.forge-proposal {
+.nox-proposal {
   overflow: hidden;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-card);
-  background: var(--forge-surface);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-card);
+  background: var(--nox-surface);
   font-size: 12px;
 }
 
-.forge-proposal-badge,
-.forge-proposal-reason,
-.forge-proposal-actions,
-.forge-result-badge {
+.nox-proposal-badge,
+.nox-proposal-reason,
+.nox-proposal-actions,
+.nox-result-badge {
   padding: 8px 10px;
 }
 
-.forge-proposal-badge {
-  border-bottom: 1px solid var(--forge-line);
-  background: var(--forge-inset);
-  color: var(--forge-ink);
+.nox-proposal-badge {
+  border-bottom: 1px solid var(--nox-line);
+  background: var(--nox-inset);
+  color: var(--nox-ink);
   font-size: 11px;
   font-weight: 600;
 }
 
-.forge-proposal-reason {
-  border-bottom: 1px solid var(--forge-line);
-  color: var(--forge-ink-2);
+.nox-proposal-reason {
+  border-bottom: 1px solid var(--nox-line);
+  color: var(--nox-ink-2);
   font-size: 11px;
   font-style: italic;
   line-height: 1.4;
 }
 
-.forge-proposal-diff {
+.nox-proposal-diff {
   padding: 9px 10px;
-  background: var(--forge-surface);
+  background: var(--nox-surface);
   font-family: var(--font-monospace);
   font-size: 11px;
   line-height: 1.75;
   overflow-x: auto;
 }
 
-.forge-diff-removed,
-.forge-diff-added {
+.nox-diff-removed,
+.nox-diff-added {
   display: block;
   padding: 1px 5px;
-  border-radius: var(--forge-radius-chip);
+  border-radius: var(--nox-radius-chip);
   white-space: pre-wrap;
 }
 
-.forge-diff-removed {
+.nox-diff-removed {
   background: rgba(var(--color-red-rgb, 255, 59, 48), 0.06);
-  color: var(--forge-red);
+  color: var(--nox-red);
 }
 
-.forge-diff-added {
+.nox-diff-added {
   background: rgba(52, 199, 89, 0.07);
-  color: var(--forge-green);
+  color: var(--nox-green);
 }
 
-.forge-proposal-actions {
+.nox-proposal-actions {
   display: flex;
   gap: 7px;
-  border-top: 1px solid var(--forge-line);
-  background: var(--forge-inset);
+  border-top: 1px solid var(--nox-line);
+  background: var(--nox-inset);
 }
 
-.forge-btn-reject,
-.forge-btn-apply {
+.nox-btn-reject,
+.nox-btn-apply {
   flex: 1;
   min-height: 30px;
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
   cursor: pointer;
   font-size: 12px;
 }
 
-.forge-btn-reject {
-  border: 1px solid var(--forge-line);
+.nox-btn-reject {
+  border: 1px solid var(--nox-line);
   background: transparent;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
 }
 
-.forge-btn-reject:hover,
-.forge-btn-reject:focus-visible {
-  background: var(--forge-hover);
-  color: var(--forge-ink);
+.nox-btn-reject:hover,
+.nox-btn-reject:focus-visible {
+  background: var(--nox-hover);
+  color: var(--nox-ink);
 }
 
-.forge-btn-apply {
+.nox-btn-apply {
   border: 0;
-  background: var(--forge-accent);
+  background: var(--nox-accent);
   color: var(--text-on-accent);
   font-weight: 650;
 }
 
-.forge-btn-apply:hover,
-.forge-btn-apply:focus-visible {
+.nox-btn-apply:hover,
+.nox-btn-apply:focus-visible {
   filter: brightness(1.06);
 }
 
-.forge-btn-apply:disabled {
+.nox-btn-apply:disabled {
   cursor: default;
   opacity: 0.55;
 }
 
-.forge-result-badge {
-  border-top: 1px solid var(--forge-line);
+.nox-result-badge {
+  border-top: 1px solid var(--nox-line);
   font-size: 11px;
   font-weight: 600;
 }
 
-.forge-badge--applied {
+.nox-badge--applied {
   background: rgba(52, 199, 89, 0.08);
-  color: var(--forge-green);
+  color: var(--nox-green);
 }
 
-.forge-badge--rejected {
-  color: var(--forge-ink-2);
+.nox-badge--rejected {
+  color: var(--nox-ink-2);
 }
 
-.forge-badge--stale {
-  color: var(--forge-orange);
+.nox-badge--stale {
+  color: var(--nox-orange);
 }
 
-.forge-composer {
+.nox-composer {
   @apply relative shrink-0;
   position: relative;
   flex-shrink: 0;
   padding: 8px 10px 10px;
-  border-top: 1px solid var(--forge-line);
-  background: var(--forge-canvas);
+  border-top: 1px solid var(--nox-line);
+  background: var(--nox-canvas);
 }
 
-.forge-action-btn {
+.nox-action-btn {
   min-height: 29px;
   flex: 1 0 auto;
   padding: 5px 9px;
   border: 0;
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
   background: transparent;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   cursor: pointer;
   font-size: 11px;
   font-weight: 550;
   white-space: nowrap;
 }
 
-.forge-action-btn:hover,
-.forge-action-btn:focus-visible {
-  background: var(--forge-hover);
-  color: var(--forge-ink);
+.nox-action-btn:hover,
+.nox-action-btn:focus-visible {
+  background: var(--nox-hover);
+  color: var(--nox-ink);
 }
 
-.forge-action-btn.is-active {
-  background: var(--forge-surface);
-  color: var(--forge-ink);
+.nox-action-btn.is-active {
+  background: var(--nox-surface);
+  color: var(--nox-ink);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-.forge-context-row {
+.nox-context-row {
   gap: 8px;
   min-height: 25px;
   margin-bottom: 7px;
 }
 
-.forge-prompt-anchor {
+.nox-prompt-anchor {
   position: relative;
 }
 
-.forge-prompt-menu {
+.nox-prompt-menu {
   @apply absolute inset-x-0 z-20 overflow-hidden rounded-[10px] p-1;
   position: absolute;
   right: 0;
@@ -991,13 +991,13 @@
   z-index: 20;
   overflow: hidden;
   padding: 4px;
-  border: 1px solid var(--forge-line-strong);
-  border-radius: var(--forge-radius-card);
-  background: var(--forge-surface);
+  border: 1px solid var(--nox-line-strong);
+  border-radius: var(--nox-radius-card);
+  background: var(--nox-surface);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 18px rgba(0, 0, 0, 0.08);
 }
 
-.forge-prompt-menu-row {
+.nox-prompt-menu-row {
   @apply grid w-full min-h-[34px] items-center gap-2 rounded-[6px] border-0 px-2 py-1.5 text-left;
   display: grid;
   grid-template-columns: 22px minmax(0, auto) minmax(0, 1fr);
@@ -1007,44 +1007,44 @@
   min-height: 34px;
   padding: 6px 8px;
   border: 0;
-  border-radius: var(--forge-radius-chip);
+  border-radius: var(--nox-radius-chip);
   background: transparent;
-  color: var(--forge-ink);
+  color: var(--nox-ink);
   cursor: pointer;
   text-align: left;
 }
 
-.forge-prompt-menu-row:hover,
-.forge-prompt-menu-row.is-active {
-  background: var(--forge-hover);
+.nox-prompt-menu-row:hover,
+.nox-prompt-menu-row.is-active {
+  background: var(--nox-hover);
 }
 
-.forge-prompt-menu-icon {
+.nox-prompt-menu-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: var(--forge-radius-chip);
-  color: var(--forge-ink-2);
+  border-radius: var(--nox-radius-chip);
+  color: var(--nox-ink-2);
   font-size: 15px;
 }
 
-.forge-prompt-menu-icon .svg-icon,
-.forge-attachment-icon .svg-icon,
-.forge-attachment-remove .svg-icon,
-.forge-intent-remove .svg-icon,
-.forge-progress-mark .svg-icon,
-.forge-new-btn .svg-icon,
-.forge-more-btn .svg-icon,
-.forge-prompt-plus .svg-icon,
-.forge-send-btn .svg-icon,
-.forge-cancel-btn .svg-icon {
+.nox-prompt-menu-icon .svg-icon,
+.nox-attachment-icon .svg-icon,
+.nox-attachment-remove .svg-icon,
+.nox-intent-remove .svg-icon,
+.nox-progress-mark .svg-icon,
+.nox-new-btn .svg-icon,
+.nox-more-btn .svg-icon,
+.nox-prompt-plus .svg-icon,
+.nox-send-btn .svg-icon,
+.nox-cancel-btn .svg-icon {
   width: 15px;
   height: 15px;
 }
 
-.forge-prompt-menu-name {
+.nox-prompt-menu-name {
   overflow: hidden;
   font-size: 12px;
   font-weight: 600;
@@ -1052,36 +1052,36 @@
   white-space: nowrap;
 }
 
-.forge-prompt-menu-description {
+.nox-prompt-menu-description {
   overflow: hidden;
-  color: var(--forge-ink-3);
+  color: var(--nox-ink-3);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.forge-prompt-menu-empty,
-.forge-prompt-menu-hint {
+.nox-prompt-menu-empty,
+.nox-prompt-menu-hint {
   padding: 7px 8px;
-  color: var(--forge-ink-3);
+  color: var(--nox-ink-3);
   font-size: 10px;
 }
 
-.forge-prompt-menu-hint {
+.nox-prompt-menu-hint {
   margin-top: 3px;
-  border-top: 1px solid var(--forge-line);
+  border-top: 1px solid var(--nox-line);
 }
 
-.forge-context-label {
+.nox-context-label {
   flex: 0 0 auto;
-  color: var(--forge-ink-3);
+  color: var(--nox-ink-3);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.forge-chips {
+.nox-chips {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -1089,76 +1089,76 @@
   gap: 4px;
 }
 
-.forge-chip {
+.nox-chip {
   display: inline-flex;
   align-items: center;
   min-width: 0;
   gap: 5px;
   padding: 3px 8px;
   overflow: hidden;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-pill);
-  background: var(--forge-surface);
-  color: var(--forge-ink-2);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-pill);
+  background: var(--nox-surface);
+  color: var(--nox-ink-2);
   font-size: 10px;
   font-weight: 550;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.forge-chip-dot {
+.nox-chip-dot {
   width: 5px;
   height: 5px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: var(--forge-accent);
+  background: var(--nox-accent);
 }
 
-.forge-composer-box {
+.nox-composer-box {
   @apply flex flex-col gap-2 rounded-[10px] p-2.5;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px;
   border: 0;
-  border-radius: var(--forge-radius-card);
-  background: var(--forge-surface);
+  border-radius: var(--nox-radius-card);
+  background: var(--nox-surface);
   box-shadow: none;
   cursor: text;
 }
 
-.forge-attachments {
+.nox-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding-bottom: 1px;
 }
 
-.forge-attachment-chip {
+.nox-attachment-chip {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
   gap: 5px;
   min-height: 25px;
   padding: 3px 4px 3px 7px;
-  border-radius: var(--forge-radius-chip);
-  background: var(--forge-inset);
-  color: var(--forge-ink-2);
+  border-radius: var(--nox-radius-chip);
+  background: var(--nox-inset);
+  color: var(--nox-ink-2);
   font-size: 11px;
 }
 
-.forge-attachment-icon {
-  color: var(--forge-accent);
+.nox-attachment-icon {
+  color: var(--nox-accent);
 }
 
-.forge-attachment-name {
+.nox-attachment-name {
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.forge-attachment-remove {
+.nox-attachment-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1166,31 +1166,31 @@
   height: 19px;
   padding: 0;
   border: 0;
-  border-radius: var(--forge-radius-chip);
+  border-radius: var(--nox-radius-chip);
   background: transparent;
-  color: var(--forge-ink-3);
+  color: var(--nox-ink-3);
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
 }
 
-.forge-attachment-remove:hover,
-.forge-attachment-remove:focus-visible {
-  background: var(--forge-hover);
-  color: var(--forge-ink);
+.nox-attachment-remove:hover,
+.nox-attachment-remove:focus-visible {
+  background: var(--nox-hover);
+  color: var(--nox-ink);
 }
 
-.forge-file-input {
+.nox-file-input {
   display: none;
 }
 
-.forge-composer-controls {
+.nox-composer-controls {
   @apply flex min-w-0 items-center gap-1.5;
   min-width: 0;
   gap: 6px;
 }
 
-.forge-prompt-plus {
+.nox-prompt-plus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1199,27 +1199,27 @@
   flex: 0 0 auto;
   padding: 0;
   border: 0;
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
   background: transparent;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   cursor: pointer;
   font-size: 19px;
   line-height: 1;
 }
 
-.forge-prompt-plus:hover,
-.forge-prompt-plus:focus-visible,
-.forge-prompt-plus[aria-expanded="true"] {
-  background: var(--forge-hover);
-  color: var(--forge-ink);
+.nox-prompt-plus:hover,
+.nox-prompt-plus:focus-visible,
+.nox-prompt-plus[aria-expanded="true"] {
+  background: var(--nox-hover);
+  color: var(--nox-ink);
 }
 
-.forge-composer-box:focus-within {
+.nox-composer-box:focus-within {
   border: 0;
   box-shadow: none;
 }
 
-.forge-input {
+.nox-input {
   min-height: 20px;
   max-height: 92px;
   flex: 1;
@@ -1229,37 +1229,37 @@
   border-radius: 0;
   outline: none;
   background: transparent;
-  color: var(--forge-ink);
+  color: var(--nox-ink);
   font-family: var(--font-interface);
   font-size: var(--font-ui-small, 13px);
   line-height: 1.45;
 }
 
-.forge-input:focus {
+.nox-input:focus {
   border: 0;
   box-shadow: none;
 }
 
-.forge-input::placeholder {
-  color: var(--forge-ink-3);
+.nox-input::placeholder {
+  color: var(--nox-ink-3);
 }
 
-.forge-input:disabled {
+.nox-input:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-.forge-composer-footer {
+.nox-composer-footer {
   @apply flex items-center justify-between gap-2;
   justify-content: space-between;
   gap: 8px;
 }
 
-.forge-btn-group {
+.nox-btn-group {
   gap: 5px;
 }
 
-.forge-composer-tools {
+.nox-composer-tools {
   @apply flex items-center gap-1;
   display: flex;
   align-items: center;
@@ -1267,7 +1267,7 @@
   gap: 4px;
 }
 
-.forge-composer-tools .forge-model-select {
+.nox-composer-tools .nox-model-select {
   max-width: 150px;
   height: 28px;
   border: 0;
@@ -1275,218 +1275,218 @@
   font-size: 11px;
 }
 
-.forge-composer-tools .forge-model-select:hover,
-.forge-composer-tools .forge-model-select:focus {
+.nox-composer-tools .nox-model-select:hover,
+.nox-composer-tools .nox-model-select:focus {
   border-color: transparent;
-  background: var(--forge-hover);
+  background: var(--nox-hover);
 }
 
-.forge-send-btn,
-.forge-cancel-btn {
+.nox-send-btn,
+.nox-cancel-btn {
   width: 31px;
   height: 31px;
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
   font-size: 16px;
   line-height: 1;
 }
 
-.forge-send-btn {
-  background: var(--forge-accent);
+.nox-send-btn {
+  background: var(--nox-accent);
   color: var(--text-on-accent);
 }
 
-.forge-send-btn:hover,
-.forge-send-btn:focus-visible {
+.nox-send-btn:hover,
+.nox-send-btn:focus-visible {
   filter: brightness(1.06);
 }
 
-.forge-send-btn:disabled {
+.nox-send-btn:disabled {
   cursor: not-allowed;
   opacity: 0.3;
 }
 
-.forge-cancel-btn {
-  background: var(--forge-hover);
-  color: var(--forge-ink-2);
+.nox-cancel-btn {
+  background: var(--nox-hover);
+  color: var(--nox-ink-2);
 }
 
-.forge-cancel-btn:hover,
-.forge-cancel-btn:focus-visible {
-  color: var(--forge-red);
+.nox-cancel-btn:hover,
+.nox-cancel-btn:focus-visible {
+  color: var(--nox-red);
 }
 
-.forge-composer-hint {
+.nox-composer-hint {
   margin-top: 5px;
-  color: var(--forge-ink-3);
+  color: var(--nox-ink-3);
   font-size: 10px;
   line-height: 1.3;
   text-align: right;
 }
 
-.forge-hidden,
-.forge-chip--hidden {
+.nox-hidden,
+.nox-chip--hidden {
   display: none !important;
 }
 
-@keyframes forge-blink {
+@keyframes nox-blink {
   50% { opacity: 0; }
 }
 
-@keyframes forge-stream-word-resolve {
+@keyframes nox-stream-word-resolve {
   from { opacity: 0.2; filter: blur(3px); }
   to { opacity: 1; filter: blur(0); }
 }
 
-@keyframes forge-stream-actions-in {
+@keyframes nox-stream-actions-in {
   from { opacity: 0; transform: translateY(2px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes forge-thinking-pulse {
+@keyframes nox-thinking-pulse {
   50% { opacity: 0.58; }
 }
 
-@keyframes forge-thinking-fade-up {
+@keyframes nox-thinking-fade-up {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes forge-thinking-spin {
+@keyframes nox-thinking-spin {
   to { transform: rotate(360deg); }
 }
 
 @media (max-width: 420px) {
-  .forge-header {
+  .nox-header {
     padding-inline: 9px;
   }
 
-  .forge-model-select {
+  .nox-model-select {
     max-width: 130px;
   }
 
-  .forge-thread {
+  .nox-thread {
     padding-inline: 10px;
   }
 
-  .forge-composer {
+  .nox-composer {
     padding-inline: 9px;
   }
 
-  .forge-composer-hint {
+  .nox-composer-hint {
     display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .forge-thread {
+  .nox-thread {
     scroll-behavior: auto;
   }
 
-  .forge-bubble--streaming::after,
-  .forge-stream-word,
-  .forge-stream-actions,
-  .forge-thinking-label--active,
-  .forge-thinking-row,
-  .forge-thinking-marker--spinner {
+  .nox-bubble--streaming::after,
+  .nox-stream-word,
+  .nox-stream-actions,
+  .nox-thinking-label--active,
+  .nox-thinking-row,
+  .nox-thinking-marker--spinner {
     animation: none;
   }
 
-  .forge-thinking-panel,
-  .forge-thinking-chevron {
+  .nox-thinking-panel,
+  .nox-thinking-chevron {
     transition: none;
   }
 
-  .forge-thinking-marker--spinner {
+  .nox-thinking-marker--spinner {
     transform: none;
   }
 }
 
-/* ── Forge workspace composition ──────────────────────────────────────────
+/* ── Nox workspace composition ──────────────────────────────────────────
  * The empty surface is the product entry point. Keep the visual language
  * quiet and let the composer carry the primary interaction.
  */
-.forge-root {
+.nox-root {
   margin: 0;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-window);
-  background: var(--forge-surface);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-window);
+  background: var(--nox-surface);
 }
 
-.forge-header {
+.nox-header {
   min-height: 58px;
   padding: 10px 12px;
-  border-bottom-color: var(--forge-line);
-  background: var(--forge-surface);
+  border-bottom-color: var(--nox-line);
+  background: var(--nox-surface);
 }
 
-.forge-header-brand {
+.nox-header-brand {
   gap: 8px;
 }
 
-.forge-header-logo {
+.nox-header-logo {
   width: 28px;
   height: 28px;
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
 }
 
-.forge-header-title {
+.nox-header-title {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0;
 }
 
-.forge-header-right {
+.nox-header-right {
   gap: 4px;
 }
 
-.forge-new-btn,
-.forge-more-btn {
+.nox-new-btn,
+.nox-more-btn {
   width: 28px;
   height: 28px;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   box-shadow: none;
   font-size: 18px;
   line-height: 1;
 }
 
-.forge-more-btn {
+.nox-more-btn {
   font-size: 18px;
   letter-spacing: 2px;
 }
 
-.forge-new-btn:hover,
-.forge-new-btn:focus-visible,
-.forge-more-btn:hover,
-.forge-more-btn:focus-visible {
-  background: var(--forge-hover);
-  color: var(--forge-ink);
+.nox-new-btn:hover,
+.nox-new-btn:focus-visible,
+.nox-more-btn:hover,
+.nox-more-btn:focus-visible {
+  background: var(--nox-hover);
+  color: var(--nox-ink);
 }
 
-.forge-thread {
+.nox-thread {
   gap: 8px;
   padding: 10px 12px 12px;
-  background: var(--forge-surface);
+  background: var(--nox-surface);
 }
 
-.forge-empty-slate {
+.nox-empty-slate {
   gap: 8px;
   min-height: 0;
   margin: auto;
   padding: 32px 24px;
 }
 
-.forge-empty-logo {
+.nox-empty-logo {
   width: 42px;
   height: 42px;
   margin-bottom: 4px;
-  border-radius: var(--forge-radius-window);
+  border-radius: var(--nox-radius-window);
   object-fit: cover;
 }
 
-.forge-empty-label {
+.nox-empty-label {
   max-width: 360px;
   font-size: 21px;
   font-weight: 600;
@@ -1494,13 +1494,13 @@
   line-height: 1.3;
 }
 
-.forge-empty-hint {
+.nox-empty-hint {
   max-width: 340px;
   font-size: 13px;
   line-height: 1.5;
 }
 
-.forge-empty-actions {
+.nox-empty-actions {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1508,69 +1508,69 @@
   margin-top: 10px;
 }
 
-.forge-empty-action {
+.nox-empty-action {
   min-height: 28px;
   padding: 5px 10px;
-  border: 1px solid var(--forge-line-strong);
-  border-radius: var(--forge-radius-pill);
-  background: var(--forge-surface);
-  color: var(--forge-ink-2);
+  border: 1px solid var(--nox-line-strong);
+  border-radius: var(--nox-radius-pill);
+  background: var(--nox-surface);
+  color: var(--nox-ink-2);
   cursor: pointer;
   font-size: 12.5px;
 }
 
-.forge-empty-action:hover,
-.forge-empty-action:focus-visible {
-  border-color: var(--forge-accent-border);
-  background: var(--forge-accent-tint);
-  color: var(--forge-ink);
+.nox-empty-action:hover,
+.nox-empty-action:focus-visible {
+  border-color: var(--nox-accent-border);
+  background: var(--nox-accent-tint);
+  color: var(--nox-ink);
 }
 
-.forge-composer {
+.nox-composer {
   padding: 10px 12px 12px;
-  border-top-color: var(--forge-line);
-  background: var(--forge-canvas);
+  border-top-color: var(--nox-line);
+  background: var(--nox-canvas);
 }
 
-.forge-context-row {
+.nox-context-row {
   display: none;
 }
 
-.forge-composer-box {
+.nox-composer-box {
   gap: 6px;
   padding: 8px;
-  border-radius: var(--forge-radius-card);
-  background: var(--forge-surface);
+  border-radius: var(--nox-radius-card);
+  background: var(--nox-surface);
   box-shadow: none;
 }
 
-.forge-composer-controls {
+.nox-composer-controls {
   display: block;
 }
 
-.forge-prompt-plus {
+.nox-prompt-plus {
   margin-top: 1px;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
 }
 
-.forge-input {
+.nox-input {
   min-height: 28px;
   padding: 5px 4px;
   font-size: 13px;
   line-height: 1.45;
 }
 
-.forge-composer-footer {
+.nox-composer-footer {
   align-items: center;
   gap: 6px;
 }
 
-.forge-composer-tools {
+.nox-composer-tools {
   flex: 1;
   gap: 4px;
 }
 
-.forge-composer-tools .forge-model-select {
+.nox-composer-tools .nox-model-select {
   display: inline-flex;
   align-items: center;
   height: 28px;
@@ -1578,116 +1578,116 @@
   max-width: 190px;
   padding: 0 10px;
   overflow: hidden;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-control);
-  background: var(--forge-surface);
-  color: var(--forge-ink-2);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-control);
+  background: var(--nox-surface);
+  color: var(--nox-ink-2);
   cursor: pointer;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.forge-composer-tools .forge-model-select:hover,
-.forge-composer-tools .forge-model-select:focus-visible {
-  border-color: var(--forge-line-strong);
-  background: var(--forge-hover);
-  color: var(--forge-ink);
+.nox-composer-tools .nox-model-select:hover,
+.nox-composer-tools .nox-model-select:focus-visible {
+  border-color: var(--nox-line-strong);
+  background: var(--nox-hover);
+  color: var(--nox-ink);
 }
 
-.forge-composer-tools .forge-model-select {
+.nox-composer-tools .nox-model-select {
   width: 190px;
   max-width: 190px;
   height: 28px;
   padding: 0 25px 0 10px;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-control);
-  background: var(--forge-surface);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-control);
+  background: var(--nox-surface);
   font-size: 12px;
 }
 
-.forge-send-btn,
-.forge-cancel-btn {
+.nox-send-btn,
+.nox-cancel-btn {
   width: 28px;
   height: 28px;
-  border-radius: var(--forge-radius-control);
+  border-radius: var(--nox-radius-control);
   font-size: 16px;
 }
 
-.forge-send-btn {
-  background: var(--forge-hover-2);
-  color: var(--forge-ink-3);
+.nox-send-btn {
+  background: var(--nox-hover-2);
+  color: var(--nox-ink-3);
 }
 
-.forge-send-btn:not(:disabled) {
-  background: var(--forge-accent);
+.nox-send-btn:not(:disabled) {
+  background: var(--nox-accent);
   color: var(--text-on-accent);
 }
 
-.forge-send-btn:not(:disabled):hover,
-.forge-send-btn:not(:disabled):focus-visible {
+.nox-send-btn:not(:disabled):hover,
+.nox-send-btn:not(:disabled):focus-visible {
   filter: brightness(1.05);
 }
 
-.forge-composer-hint {
+.nox-composer-hint {
   margin-top: 5px;
   padding-right: 0;
   font-size: 10px;
 }
 
 @media (max-width: 600px) {
-  .forge-header {
+  .nox-header {
     padding-inline: 9px;
   }
 
-  .forge-thread {
+  .nox-thread {
     padding-inline: 10px;
   }
 
-  .forge-composer {
+  .nox-composer {
     padding-inline: 9px;
   }
 
-  .forge-empty-label {
+  .nox-empty-label {
     font-size: 19px;
   }
 
-  .forge-empty-hint {
+  .nox-empty-hint {
     font-size: 12px;
   }
 
-  .forge-empty-actions {
+  .nox-empty-actions {
     flex-wrap: wrap;
   }
 
-  .forge-empty-action {
+  .nox-empty-action {
     min-height: 28px;
     padding-inline: 10px;
     font-size: 12px;
   }
 
-  .forge-composer-tools .forge-model-select {
+  .nox-composer-tools .nox-model-select {
     max-width: 45%;
     font-size: 11px;
   }
 
-  .forge-composer-tools .forge-model-select {
+  .nox-composer-tools .nox-model-select {
     width: 45%;
   }
 }
 
 
-/* ── Forge conversation + learning object system v1 ──────────────────────── */
-.forge-bubble--user {
+/* ── Nox conversation + learning object system v1 ──────────────────────── */
+.nox-bubble--user {
   max-width: 84%;
   padding: 8px 10px;
-  border: 1px solid var(--forge-accent-border);
-  border-radius: var(--forge-radius-card);
-  background: var(--forge-accent-tint);
-  color: var(--forge-ink);
+  border: 1px solid var(--nox-accent-border);
+  border-radius: var(--nox-radius-card);
+  background: var(--nox-accent-tint);
+  color: var(--nox-ink);
   box-shadow: none;
 }
-.forge-bubble--agent {
+.nox-bubble--agent {
   width: 100%;
   max-width: 100%;
   padding: 0;
@@ -1696,127 +1696,127 @@
   background: transparent;
   box-shadow: none;
 }
-.forge-bubble-content.forge-markdown { line-height: 1.5; }
-.forge-response-meta { margin-bottom: 5px; color: var(--forge-ink-3); font-size: 11px; }
-.forge-response-label { color: var(--forge-ink); font-weight: 600; }
-.forge-response-time { color: var(--forge-ink-3); }
+.nox-bubble-content.nox-markdown { line-height: 1.5; }
+.nox-response-meta { margin-bottom: 5px; color: var(--nox-ink-3); font-size: 11px; }
+.nox-response-label { color: var(--nox-ink); font-weight: 600; }
+.nox-response-time { color: var(--nox-ink-3); }
 
-.forge-intent-row { display: flex; align-items: center; gap: 6px; }
-.forge-intent-row.forge-hidden { display: none; }
-.forge-intent-chip {
+.nox-intent-row { display: flex; align-items: center; gap: 6px; }
+.nox-intent-row.nox-hidden { display: none; }
+.nox-intent-chip {
   display: inline-flex;
   min-height: 26px;
   align-items: center;
   gap: 5px;
   padding: 3px 6px 3px 9px;
-  border: 1px solid var(--forge-accent-border);
-  border-radius: var(--forge-radius-pill);
-  background: var(--forge-accent-tint);
-  color: var(--forge-accent-ink);
+  border: 1px solid var(--nox-accent-border);
+  border-radius: var(--nox-radius-pill);
+  background: var(--nox-accent-tint);
+  color: var(--nox-accent-ink);
   font-size: 12px;
   font-weight: 500;
 }
-.forge-intent-remove {
+.nox-intent-remove {
   display: inline-flex;
   width: 18px; height: 18px;
   align-items: center; justify-content: center;
   padding: 0; border: 0;
-  border-radius: var(--forge-radius-pill);
+  border-radius: var(--nox-radius-pill);
   background: transparent;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   cursor: pointer;
 }
-.forge-intent-remove:hover,
-.forge-intent-remove:focus-visible { background: var(--forge-hover); color: var(--forge-ink); }
+.nox-intent-remove:hover,
+.nox-intent-remove:focus-visible { background: var(--nox-hover); color: var(--nox-ink); }
 
-.forge-prompt-menu-row:disabled { cursor: default; opacity: 0.72; }
-.forge-prompt-menu-row:disabled:hover { background: transparent; }
-.forge-composer-tools .forge-model-select { width: auto; max-width: 120px; }
+.nox-prompt-menu-row:disabled { cursor: default; opacity: 0.72; }
+.nox-prompt-menu-row:disabled:hover { background: transparent; }
+.nox-composer-tools .nox-model-select { width: auto; max-width: 120px; }
 
-.forge-thinking-panel {
+.nox-thinking-panel {
   transition: grid-template-rows 220ms cubic-bezier(0.23,1,0.32,1), opacity 160ms ease;
 }
-.forge-thinking-trace--facts::before { display: none; }
-.forge-thinking-trace--facts { gap: 2px; margin-left: 20px; padding-left: 0; }
-.forge-thinking-trace--facts .forge-thinking-row {
+.nox-thinking-trace--facts::before { display: none; }
+.nox-thinking-trace--facts { gap: 2px; margin-left: 20px; padding-left: 0; }
+.nox-thinking-trace--facts .nox-thinking-row {
   min-height: 24px;
   padding: 1px 4px;
   animation: none;
   background: transparent;
 }
 
-.forge-practice-card,
-.forge-practice-evaluation,
-.forge-review-card {
+.nox-practice-card,
+.nox-practice-evaluation,
+.nox-review-card {
   margin-top: 10px;
   padding: 12px;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-card);
-  background: var(--forge-surface);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-card);
+  background: var(--nox-surface);
   box-shadow: 0 1px 2px rgba(0,0,0,0.035);
 }
-.forge-practice-card { border-color: var(--forge-line-strong); }
-.forge-practice-hint {
+.nox-practice-card { border-color: var(--nox-line-strong); }
+.nox-practice-hint {
   padding: 7px 8px;
-  border-radius: var(--forge-radius-control);
-  background: var(--forge-inset);
+  border-radius: var(--nox-radius-control);
+  background: var(--nox-inset);
   font-style: normal;
 }
-.forge-practice-evaluation.forge-outcome--correct .forge-practice-label { color: var(--forge-green); }
-.forge-practice-evaluation.forge-outcome--partial .forge-practice-label { color: var(--forge-orange); }
-.forge-practice-evaluation.forge-outcome--incorrect .forge-practice-label { color: var(--forge-red); }
+.nox-practice-evaluation.nox-outcome--correct .nox-practice-label { color: var(--nox-green); }
+.nox-practice-evaluation.nox-outcome--partial .nox-practice-label { color: var(--nox-orange); }
+.nox-practice-evaluation.nox-outcome--incorrect .nox-practice-label { color: var(--nox-red); }
 
-.forge-review { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.forge-review-summary { color: var(--forge-ink-2); font-size: 12px; font-weight: 500; }
-.forge-review-card { margin-top: 0; }
-.forge-review-kind {
-  color: var(--forge-orange);
+.nox-review { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.nox-review-summary { color: var(--nox-ink-2); font-size: 12px; font-weight: 500; }
+.nox-review-card { margin-top: 0; }
+.nox-review-kind {
+  color: var(--nox-orange);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.forge-review-card--factual-error .forge-review-kind,
-.forge-review-card--misconception .forge-review-kind { color: var(--forge-red); }
-.forge-review-title { margin-top: 5px; color: var(--forge-ink); font-size: 13px; font-weight: 600; line-height: 1.4; }
-.forge-review-detail { margin-top: 4px; color: var(--forge-ink-2); font-size: 12px; line-height: 1.5; }
-.forge-review-actions { display: flex; gap: 5px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--forge-line); }
-.forge-review-action {
+.nox-review-card--factual-error .nox-review-kind,
+.nox-review-card--misconception .nox-review-kind { color: var(--nox-red); }
+.nox-review-title { margin-top: 5px; color: var(--nox-ink); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.nox-review-detail { margin-top: 4px; color: var(--nox-ink-2); font-size: 12px; line-height: 1.5; }
+.nox-review-actions { display: flex; gap: 5px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--nox-line); }
+.nox-review-action {
   min-height: 27px;
   padding: 3px 9px;
-  border: 1px solid var(--forge-line);
-  border-radius: var(--forge-radius-pill);
+  border: 1px solid var(--nox-line);
+  border-radius: var(--nox-radius-pill);
   background: transparent;
-  color: var(--forge-ink-2);
+  color: var(--nox-ink-2);
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
 }
-.forge-review-action:hover,
-.forge-review-action:focus-visible {
-  border-color: var(--forge-accent-border);
-  background: var(--forge-accent-tint);
-  color: var(--forge-ink);
+.nox-review-action:hover,
+.nox-review-action:focus-visible {
+  border-color: var(--nox-accent-border);
+  background: var(--nox-accent-tint);
+  color: var(--nox-ink);
 }
 
-.forge-progress-row {
+.nox-progress-row {
   display: flex;
   align-items: center;
   gap: 6px;
   min-height: 26px;
-  color: var(--forge-ink-3);
+  color: var(--nox-ink-3);
   font-size: 11px;
 }
-.forge-progress-mark { color: var(--forge-green); }
+.nox-progress-mark { color: var(--nox-green); }
 
-.forge-proposal { box-shadow: 0 1px 2px rgba(0,0,0,0.035); }
-.forge-proposal-badge { background: var(--forge-surface); }
-.forge-proposal-reason { background: var(--forge-inset); font-style: normal; }
-.forge-btn-apply,
-.forge-btn-reject { min-height: 28px; border-radius: var(--forge-radius-pill); }
+.nox-proposal { box-shadow: 0 1px 2px rgba(0,0,0,0.035); }
+.nox-proposal-badge { background: var(--nox-surface); }
+.nox-proposal-reason { background: var(--nox-inset); font-style: normal; }
+.nox-btn-apply,
+.nox-btn-reject { min-height: 28px; border-radius: var(--nox-radius-pill); }
 
 @media (prefers-reduced-motion: reduce) {
-  .forge-thinking-label--active,
-  .forge-stream-word,
-  .forge-bubble--streaming::after { animation: none !important; }
+  .nox-thinking-label--active,
+  .nox-stream-word,
+  .nox-bubble--streaming::after { animation: none !important; }
 }
