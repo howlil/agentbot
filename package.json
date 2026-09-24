@@ -17,7 +17,8 @@
     "build": "node esbuild.config.mjs production",
     "deploy": "pnpm run build && node scripts/deploy.mjs",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs"
   },
   "keywords": [
     "obsidian",

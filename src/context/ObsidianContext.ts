@@ -1,36 +1,69 @@
-import { App, TFile } from "obsidian";
+import {
+  App,
+  MarkdownView,
+  Plugin,
+  TFile,
+} from "obsidian";
 
 /**
- * ObsidianContext — resolves context from the active Obsidian workspace.
- *
- * Resolution rules (Spike 2):
- *   1. Selection present → context = [selection]
- *   2. No selection      → context = [current-note]
- *   3. User adds @file   → context = [auto] + [explicit...]
- *
- * Every context item is visible as a chip in the Composer.
- * Nothing is read silently.
+ * Resolves learning context from the most recent Markdown editor rather than
+ * blindly trusting workspace.activeLeaf. The Forge sidebar can own focus
+ * without losing the learner's note/selection.
  */
 export class ObsidianContext {
-  constructor(private app: App) {}
+  private lastMarkdownView: MarkdownView | null = null;
 
-  /** Current editor selection, or null. */
-  getSelection(): { file: string; content: string } | null {
-    // @ts-ignore — MarkdownView exposes .editor
-    const editor = this.app.workspace.activeLeaf?.view?.editor;
-    if (!editor) return null;
-    const sel = editor.getSelection?.() ?? "";
-    if (!sel) return null;
-    const file = this.app.workspace.getActiveFile();
-    return { file: file?.path ?? "untitled", content: sel };
+  constructor(
+    private readonly app: App,
+    plugin: Plugin,
+  ) {
+    this.captureCurrentMarkdownView();
+
+    plugin.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf?.view instanceof MarkdownView) {
+          this.lastMarkdownView = leaf.view;
+        }
+      }),
+    );
+
+    plugin.registerEvent(
+      this.app.workspace.on("file-open", () => {
+        this.captureCurrentMarkdownView();
+      }),
+    );
   }
 
-  /** Full content of the active note, or null. */
+  getSelection(): { file: string; content: string } | null {
+    const view = this.getRelevantMarkdownView();
+    const file = view?.file;
+    const selection = view?.editor.getSelection() ?? "";
+
+    if (!file || !selection) return null;
+
+    return {
+      file: file.path,
+      content: selection,
+    };
+  }
+
   async getCurrentNote(): Promise<{ file: string; content: string } | null> {
+    const view = this.getRelevantMarkdownView();
+
+    if (view?.file) {
+      return {
+        file: view.file.path,
+        content: view.editor.getValue(),
+      };
+    }
+
     const file = this.app.workspace.getActiveFile();
     if (!file || !(file instanceof TFile)) return null;
-    const content = await this.app.vault.cachedRead(file);
-    return { file: file.path, content };
+
+    return {
+      file: file.path,
+      content: await this.app.vault.cachedRead(file),
+    };
   }
 
   searchNotes(
@@ -52,16 +85,34 @@ export class ObsidianContext {
               ? 1
               : 2,
       }))
-      .filter((item) =>
-        item.name.toLowerCase().includes(normalized) ||
-        item.path.toLowerCase().includes(normalized),
+      .filter(
+        (item) =>
+          item.name.toLowerCase().includes(normalized) ||
+          item.path.toLowerCase().includes(normalized),
       )
-      .sort((a, b) => a.score - b.score || a.path.localeCompare(b.path))
+      .sort(
+        (a, b) =>
+          a.score - b.score || a.path.localeCompare(b.path),
+      )
       .slice(0, limit)
       .map(({ path, name }) => ({ path, name }));
   }
 
-  async loadNote(path: string): Promise<{ file: string; content: string } | null> {
+  async loadNote(
+    path: string,
+  ): Promise<{ file: string; content: string } | null> {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      if (
+        leaf.view instanceof MarkdownView &&
+        leaf.view.file?.path === path
+      ) {
+        return {
+          file: path,
+          content: leaf.view.editor.getValue(),
+        };
+      }
+    }
+
     const file = this.app.vault.getFileByPath(path);
     if (!file || !(file instanceof TFile)) return null;
 
@@ -69,5 +120,36 @@ export class ObsidianContext {
       file: file.path,
       content: await this.app.vault.cachedRead(file),
     };
+  }
+
+  private captureCurrentMarkdownView(): void {
+    const active =
+      this.app.workspace.getActiveViewOfType(MarkdownView);
+
+    if (active) {
+      this.lastMarkdownView = active;
+    }
+  }
+
+  private getRelevantMarkdownView(): MarkdownView | null {
+    const active =
+      this.app.workspace.getActiveViewOfType(MarkdownView);
+
+    if (active) {
+      this.lastMarkdownView = active;
+      return active;
+    }
+
+    if (
+      this.lastMarkdownView?.file &&
+      this.app.workspace
+        .getLeavesOfType("markdown")
+        .some((leaf) => leaf.view === this.lastMarkdownView)
+    ) {
+      return this.lastMarkdownView;
+    }
+
+    this.lastMarkdownView = null;
+    return null;
   }
 }

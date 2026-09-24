@@ -50,7 +50,7 @@ export default class ForgePlugin extends Plugin {
       sessions.setModel(this.forgeSettings.preferredModel);
     }
 
-    const obsidianContext = new ObsidianContext(this.app);
+    const obsidianContext = new ObsidianContext(this.app, this);
     const contexts = new ContextResolver(obsidianContext);
     const policies = new PolicyLoader(this.app);
     const mutations = new MutationService(this.app);
