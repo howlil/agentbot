@@ -6,7 +6,7 @@ import {
   statSync,
 } from "fs";
 import { tmpdir } from "os";
-import { join, resolve } from "path";
+import { join, resolve, sep } from "path";
 import { spawnSync } from "child_process";
 
 const mode = process.argv[2] ?? "all";
@@ -31,7 +31,7 @@ const allTests = collectFiles("tests").filter((path) =>
 
 const selected = allTests.filter((path) => {
   const integration = path.includes(
-    `${join("tests", "integration")}${join("")}`,
+    `${join("tests", "integration")}${sep}`,
   );
 
   if (mode === "integration") return integration;
