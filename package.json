@@ -1,15 +1,15 @@
 {
-  "name": "forge-obsidian",
+  "name": "nox-obsidian",
   "version": "0.0.1",
-  "description": "Forge is an AI learning companion for Obsidian with a pluggable agent runtime",
+  "description": "Nox is an AI learning companion for Obsidian with a pluggable agent runtime",
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/howlil/forge.git"
+    "url": "git+https://github.com/howlil/nox.git"
   },
-  "homepage": "https://github.com/howlil/forge",
+  "homepage": "https://github.com/howlil/nox",
   "bugs": {
-    "url": "https://github.com/howlil/forge/issues"
+    "url": "https://github.com/howlil/nox/issues"
   },
   "main": "dist/main.js",
   "scripts": {

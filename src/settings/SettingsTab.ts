@@ -1,16 +1,16 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import type ForgePlugin from "../main";
+import type NoxPlugin from "../main";
 
-export class ForgeSettingsTab extends PluginSettingTab {
-  constructor(app: App, private readonly forge: ForgePlugin) {
-    super(app, forge);
+export class NoxSettingsTab extends PluginSettingTab {
+  constructor(app: App, private readonly nox: NoxPlugin) {
+    super(app, nox);
   }
 
   display(): void {
     const { containerEl } = this;
-    const settings = this.forge.getSettings();
+    const settings = this.nox.getSettings();
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Forge" });
+    containerEl.createEl("h2", { text: "Nox" });
 
     new Setting(containerEl)
       .setName("Agent executable")
@@ -20,7 +20,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           .setPlaceholder("Use PATH discovery")
           .setValue(settings.executablePath)
           .onChange(async (value) => {
-            await this.forge.updateSettings({ executablePath: value.trim() });
+            await this.nox.updateSettings({ executablePath: value.trim() });
           }),
       );
 
@@ -32,7 +32,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           .setPlaceholder("Runtime default")
           .setValue(settings.preferredModel)
           .onChange(async (value) => {
-            await this.forge.updateSettings({ preferredModel: value.trim() });
+            await this.nox.updateSettings({ preferredModel: value.trim() });
           }),
       );
   }

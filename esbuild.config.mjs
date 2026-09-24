@@ -21,9 +21,9 @@ const copyAssetsPlugin = {
           fs.copyFileSync(asset, path.join("dist", asset));
         }
       }
-      const logo = path.join("public", "forge.png");
+      const logo = path.join("public", "nox.png");
       if (fs.existsSync(logo)) {
-        fs.copyFileSync(logo, path.join("dist", "forge.png"));
+        fs.copyFileSync(logo, path.join("dist", "nox.png"));
       }
 
       const tailwind = path.resolve(

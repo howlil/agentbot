@@ -1,6 +1,6 @@
 import { addIcon, FileSystemAdapter, Plugin } from "obsidian";
 import { AgyAdapter } from "./agent/AgyAdapter";
-import { ChatView, FORGE_VIEW_TYPE } from "./chat/ChatView";
+import { ChatView, NOX_VIEW_TYPE } from "./chat/ChatView";
 import { ContextResolver } from "./context/ContextResolver";
 import { ObsidianContext } from "./context/ObsidianContext";
 import { PolicyLoader } from "./context/PolicyLoader";
@@ -10,11 +10,11 @@ import { VaultLearningStore } from "./persistence/VaultLearningStore";
 import { SessionController } from "./session/SessionController";
 import { SessionStore } from "./session/SessionStore";
 import {
-  decodeForgeSettings,
-  ForgeSettings,
-  saveForgeSettings,
-} from "./settings/ForgeSettings";
-import { ForgeSettingsTab } from "./settings/SettingsTab";
+  decodeNoxSettings,
+  NoxSettings,
+  saveNoxSettings,
+} from "./settings/NoxSettings";
+import { NoxSettingsTab } from "./settings/SettingsTab";
 
 /**
  * Composition root.
@@ -23,9 +23,9 @@ import { ForgeSettingsTab } from "./settings/SettingsTab";
  * constructs dependencies, registers Obsidian surfaces, and disposes runtime
  * resources.
  */
-export default class ForgePlugin extends Plugin {
+export default class NoxPlugin extends Plugin {
   private learning!: LearningController;
-  private forgeSettings!: ForgeSettings;
+  private noxSettings!: NoxSettings;
 
   async onload(): Promise<void> {
     const vaultAdapter = this.app.vault.adapter;
@@ -34,9 +34,9 @@ export default class ForgePlugin extends Plugin {
         ? vaultAdapter.getBasePath()
         : undefined;
 
-    this.forgeSettings = decodeForgeSettings(await this.loadData());
+    this.noxSettings = decodeNoxSettings(await this.loadData());
     const adapter = new AgyAdapter(vaultPath, () => ({
-      executablePath: this.forgeSettings.executablePath,
+      executablePath: this.noxSettings.executablePath,
     }));
     const sessionStore = new SessionStore();
     const sessions = new SessionController(
@@ -46,8 +46,8 @@ export default class ForgePlugin extends Plugin {
     );
 
     await sessions.init();
-    if (!sessions.getSession().model && this.forgeSettings.preferredModel) {
-      sessions.setModel(this.forgeSettings.preferredModel);
+    if (!sessions.getSession().model && this.noxSettings.preferredModel) {
+      sessions.setModel(this.noxSettings.preferredModel);
     }
 
     const obsidianContext = new ObsidianContext(this.app, this);
@@ -66,12 +66,12 @@ export default class ForgePlugin extends Plugin {
 
     const logoUrl = this.getLogoUrl().replace(/&/g, "&amp;");
     addIcon(
-      "forge-logo",
+      "nox-logo",
       `<image href="${logoUrl}" x="0" y="0" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" />`,
     );
 
     this.registerView(
-      FORGE_VIEW_TYPE,
+      NOX_VIEW_TYPE,
       (leaf) => new ChatView(
         leaf,
         this.learning,
@@ -80,29 +80,29 @@ export default class ForgePlugin extends Plugin {
       ),
     );
 
-    this.addSettingTab(new ForgeSettingsTab(this.app, this));
+    this.addSettingTab(new NoxSettingsTab(this.app, this));
 
     this.addRibbonIcon(
-      "forge-logo",
-      "Open Forge",
+      "nox-logo",
+      "Open Nox",
       () => this.activateView(),
     );
 
     this.addCommand({
-      id: "open-forge-sidebar",
-      name: "Open Forge sidebar",
+      id: "open-nox-sidebar",
+      name: "Open Nox sidebar",
       callback: () => this.activateView(),
     });
 
     this.addCommand({
-      id: "focus-forge-composer",
-      name: "Focus Forge composer",
+      id: "focus-nox-composer",
+      name: "Focus Nox composer",
       hotkeys: [{ modifiers: ["Mod"], key: "l" }],
       callback: async () => {
         await this.activateView();
 
         setTimeout(() => {
-          const leaves = this.app.workspace.getLeavesOfType(FORGE_VIEW_TYPE);
+          const leaves = this.app.workspace.getLeavesOfType(NOX_VIEW_TYPE);
           const view = leaves[0]?.view as ChatView | undefined;
           view?.focusComposer();
         }, 100);
@@ -111,13 +111,13 @@ export default class ForgePlugin extends Plugin {
   }
 
   async onunload(): Promise<void> {
-    this.app.workspace.detachLeavesOfType(FORGE_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(NOX_VIEW_TYPE);
     this.learning?.dispose();
   }
 
   private async activateView(): Promise<void> {
     const { workspace } = this.app;
-    const existing = workspace.getLeavesOfType(FORGE_VIEW_TYPE);
+    const existing = workspace.getLeavesOfType(NOX_VIEW_TYPE);
 
     if (existing.length > 0) {
       workspace.revealLeaf(existing[0]);
@@ -128,24 +128,24 @@ export default class ForgePlugin extends Plugin {
     if (!leaf) return;
 
     await leaf.setViewState({
-      type: FORGE_VIEW_TYPE,
+      type: NOX_VIEW_TYPE,
       active: true,
     });
     workspace.revealLeaf(leaf);
   }
 
-  getSettings(): ForgeSettings {
-    return { ...this.forgeSettings };
+  getSettings(): NoxSettings {
+    return { ...this.noxSettings };
   }
 
   getLogoUrl(): string {
-    const pluginPath = `${this.manifest.dir}/forge.png`;
+    const pluginPath = `${this.manifest.dir}/nox.png`;
     return this.app.vault.adapter.getResourcePath(pluginPath);
   }
 
-  async updateSettings(update: Partial<ForgeSettings>): Promise<void> {
-    this.forgeSettings = { ...this.forgeSettings, ...update };
-    await saveForgeSettings(this, this.forgeSettings);
+  async updateSettings(update: Partial<NoxSettings>): Promise<void> {
+    this.noxSettings = { ...this.noxSettings, ...update };
+    await saveNoxSettings(this, this.noxSettings);
     if (update.preferredModel !== undefined) {
       this.learning.setModel(update.preferredModel || undefined);
     }

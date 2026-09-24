@@ -1,6 +1,6 @@
 import { ChatSession } from "../types";
 
-const STORE_KEY = "forge-sessions";
+const STORE_KEY = "nox-sessions";
 const LEGACY_STORE_KEY = "agy-sessions";
 interface StoreData {
   currentSessionId: string | null;

@@ -102,7 +102,7 @@ export class LearningController {
     if (this.activeTurn) {
       yield {
         type: "failed",
-        failure: { code: "busy", message: "Another Forge turn is still running." },
+        failure: { code: "busy", message: "Another Nox turn is still running." },
       };
       return;
     }
@@ -273,7 +273,7 @@ export class LearningController {
     } catch (error) {
       const failure: AgentFailure = {
         code: "protocol-invalid",
-        message: "Forge could not interpret the agent response.",
+        message: "Nox could not interpret the agent response.",
         diagnostic: error instanceof Error ? error.message : String(error),
       };
       yield { type: "failed", failure };

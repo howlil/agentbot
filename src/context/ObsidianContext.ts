@@ -7,7 +7,7 @@ import {
 
 /**
  * Resolves learning context from the most recent Markdown editor rather than
- * blindly trusting workspace.activeLeaf. The Forge sidebar can own focus
+ * blindly trusting workspace.activeLeaf. The Nox sidebar can own focus
  * without losing the learner's note/selection.
  */
 export class ObsidianContext {
