@@ -65,12 +65,13 @@ function isEvidenceV1(
 function isEvidenceV2(
   value: unknown,
 ): value is LearningEvidence {
-  return (
-    isEvidenceV1(value) &&
-    typeof (value as Record<string, unknown>).scope === "string" &&
-    ((value as Record<string, unknown>).scope === "learner" ||
-      (value as Record<string, unknown>).scope === "material")
-  );
+  if (!isEvidenceV1(value)) return false;
+
+  const scope = (
+    value as LearningEvidenceV1 & { scope?: unknown }
+  ).scope;
+
+  return scope === "learner" || scope === "material";
 }
 
 function hasSharedShape(value: Record<string, unknown>): boolean {
