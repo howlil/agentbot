@@ -1,32 +1,61 @@
 import { AgentContext } from "../types";
 import { ObsidianContext } from "./ObsidianContext";
-import { ContextDocument, LearningContext } from "./context-types";
+import {
+  ContextDocument,
+  ExplicitContextRef,
+  LearningContext,
+} from "./context-types";
 
 /**
- * Single source of truth for the context shown in the UI and sent to the agent.
+ * Single source of truth for context shown in the UI and sent to the agent.
  *
- * Precedence:
- *   selection -> current note -> no automatic material
- * Explicit refs are additive supporting context.
+ * Explicit vault notes remain references until turn start so the latest note
+ * buffer is resolved immediately before the agent request is built.
  */
 export class ContextResolver {
   constructor(private readonly obsidian: ObsidianContext) {}
 
-  async resolve(explicit: AgentContext[] = []): Promise<LearningContext> {
+  async resolve(
+    explicit: ExplicitContextRef[] = [],
+  ): Promise<LearningContext> {
     const selection = this.obsidian.getSelection();
     const activeNote = await this.obsidian.getCurrentNote();
 
-    const explicitDocs: ContextDocument[] = explicit.map((item) => ({
-      type: item.type,
-      path: item.file,
-      content: item.content,
-      source: "explicit",
-    }));
+    const explicitDocs: ContextDocument[] = [];
+
+    for (const ref of explicit) {
+      if (ref.kind === "attachment") {
+        explicitDocs.push({
+          type: "note",
+          path: `attachment/${ref.name}`,
+          content: ref.content,
+          source: "explicit",
+        });
+        continue;
+      }
+
+      const note = await this.obsidian.loadNote(ref.path);
+      if (!note) {
+        throw new Error(
+          `Explicit context note no longer exists: ${ref.path}`,
+        );
+      }
+
+      explicitDocs.push({
+        type: "note",
+        path: note.file,
+        content: note.content,
+        source: "explicit",
+      });
+    }
 
     return {
       selection: selection ?? undefined,
       activeNote: activeNote
-        ? { path: activeNote.file, content: activeNote.content }
+        ? {
+            path: activeNote.file,
+            content: activeNote.content,
+          }
         : undefined,
       explicit: explicitDocs,
     };
@@ -39,22 +68,6 @@ export class ContextResolver {
     return this.obsidian.searchNotes(query, limit);
   }
 
-  async loadExplicitNote(path: string): Promise<AgentContext | null> {
-    const note = await this.obsidian.loadNote(path);
-    if (!note) return null;
-
-    return {
-      type: "note",
-      file: note.file,
-      content: note.content,
-    };
-  }
-
-  /**
-   * Convert resolved learning context to the existing agent transport shape.
-   * Only one automatic primary material is included:
-   * selection when present, otherwise the current note.
-   */
   toAgentContext(context: LearningContext): AgentContext[] {
     const result: AgentContext[] = [];
 
@@ -79,6 +92,7 @@ export class ContextResolver {
           existing.file === item.path &&
           existing.content === item.content,
       );
+
       if (duplicate) continue;
 
       result.push({
