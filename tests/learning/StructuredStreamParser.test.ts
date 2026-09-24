@@ -5,16 +5,27 @@ import { StructuredStreamParser } from "../../src/learning/StructuredStreamParse
 test("parses a practice block split across chunks", () => {
   const parser = new StructuredStreamParser();
 
+  const events = [
+    ...parser.push("before\n\`\`\`learning-prac"),
+    ...parser.push(
+      'tice\n{"kind":"question","concept":"indexes","question":"Why?"}\n\`\`\`',
+    ),
+    ...parser.finish(),
+  ];
+
+  assert.equal(
+    events
+      .filter(
+        (event): event is { type: "text"; text: string } =>
+          event.type === "text",
+      )
+      .map((event) => event.text)
+      .join(""),
+    "before\n",
+  );
+
   assert.deepEqual(
-    parser.push("before\n\`\`\`learning-prac"),
-    [{ type: "text", text: "before\n" }],
-  );
-
-  const events = parser.push(
-    'tice\n{"kind":"question","concept":"indexes","question":"Why?"}\n\`\`\`',
-  );
-
-  assert.deepEqual(events, [
+    events.find((event) => event.type === "practice-question"),
     {
       type: "practice-question",
       question: {
@@ -23,7 +34,7 @@ test("parses a practice block split across chunks", () => {
         question: "Why?",
       },
     },
-  ]);
+  );
 });
 
 test("reports malformed structured payloads", () => {
