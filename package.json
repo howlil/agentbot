@@ -18,7 +18,11 @@
     "deploy": "pnpm run build && node scripts/deploy.mjs",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/test.mjs"
+    "test": "pnpm test:unit",
+    "test:unit": "node scripts/test.mjs unit",
+    "test:integration": "node scripts/test.mjs integration",
+    "test:all": "node scripts/test.mjs all",
+    "verify": "pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm build"
   },
   "keywords": [
     "obsidian",
