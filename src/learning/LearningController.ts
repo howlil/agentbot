@@ -9,6 +9,7 @@ import {
 } from "../types";
 import { ContextResolver } from "../context/ContextResolver";
 import {
+  ExplicitContextRef,
   LearningContext,
   TurnContextSnapshot,
 } from "../context/context-types";
@@ -51,7 +52,7 @@ export class LearningController {
   } | null = null;
   private readonly pendingProposals = new Map<
     string,
-    { proposal: EditProposal; allowedFiles: readonly string[] }
+    { proposal: EditProposal; mutableFile?: string }
   >();
 
   constructor(
@@ -84,7 +85,7 @@ export class LearningController {
   }
 
   async resolveContext(
-    explicitContext: AgentContext[] = [],
+    explicitContext: ExplicitContextRef[] = [],
   ): Promise<LearningContext> {
     return this.contexts.resolve(explicitContext);
   }
@@ -96,9 +97,6 @@ export class LearningController {
     return this.contexts.searchNotes(query, limit);
   }
 
-  loadNoteContext(path: string): Promise<AgentContext | null> {
-    return this.contexts.loadExplicitNote(path);
-  }
 
   async *run(request: LearningRequest): AsyncIterable<LearningEvent> {
     if (this.activeTurn) {
@@ -138,17 +136,24 @@ export class LearningController {
       content: JSON.stringify(state, null, 2),
     });
 
+    const readableFiles = Array.from(
+      new Set(
+        visible
+          .filter((item) => !item.file.startsWith("attachment/"))
+          .map((item) => item.file),
+      ),
+    );
+
+    const mutableFile =
+      context.selection?.file ??
+      context.activeNote?.path;
+
     const snapshot: TurnContextSnapshot = {
       resolved: context,
       visible,
       system,
-      allowedMutationFiles: Array.from(
-        new Set(
-          visible
-            .filter((item) => !item.file.startsWith("attachment/"))
-            .map((item) => item.file),
-        ),
-      ),
+      readableFiles,
+      mutableFile,
     };
     yield { type: "context-ready", context: snapshot };
 
@@ -290,7 +295,7 @@ export class LearningController {
 
     const result = await this.mutations.apply(
       pending.proposal,
-      pending.allowedFiles,
+      pending.mutableFile,
     );
     this.pendingProposals.delete(proposalId);
     await this.sessions.updateProposalState(
@@ -334,18 +339,22 @@ export class LearningController {
       }
 
       if (event.type === "proposal") {
-        if (!context.allowedMutationFiles.includes(event.proposal.file)) {
+        if (
+          !context.mutableFile ||
+          event.proposal.file !== context.mutableFile
+        ) {
           throw new Error(
-            `Edit target is outside the approved context: ${event.proposal.file}`,
+            `Edit target is not the active mutable note: ${event.proposal.file}`,
           );
         }
+
         const edit: ProposedEdit = {
           id: crypto.randomUUID(),
           proposal: event.proposal,
         };
         this.pendingProposals.set(edit.id, {
           proposal: edit.proposal,
-          allowedFiles: context.allowedMutationFiles,
+          mutableFile: context.mutableFile,
         });
         yield {
           type: "mutation-proposed",
