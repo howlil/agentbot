@@ -157,7 +157,7 @@ export class AgyAdapter implements AgentAdapter {
     let buffer = "";
     let stderr = "";
     let exitCode: number | null = null;
-    let spawnError: Error | null = null;
+    const processState: { spawnError?: Error } = {};
     let closed = false;
     let sawTerminalEvent = false;
 
@@ -193,7 +193,7 @@ export class AgyAdapter implements AgentAdapter {
     });
 
     proc.on("error", (err) => {
-      spawnError = err;
+      processState.spawnError = err;
       wake();
     });
 
@@ -226,7 +226,7 @@ export class AgyAdapter implements AgentAdapter {
       if (closed) {
         if (!sawTerminalEvent) {
           const detail =
-            spawnError?.message ||
+            processState.spawnError?.message ||
             stderr.trim() ||
             (exitCode !== 0
               ? `AGY exited with code ${exitCode ?? "unknown"} before returning a result.`
@@ -237,8 +237,8 @@ export class AgyAdapter implements AgentAdapter {
         break;
       }
 
-      if (spawnError) {
-        yield { type: "error", error: spawnError.message };
+      if (processState.spawnError) {
+        yield { type: "error", error: processState.spawnError.message };
         break;
       }
 
