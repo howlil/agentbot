@@ -1,41 +1,27 @@
 import { App, MarkdownView, TFile } from "obsidian";
 import { ApplyResult, EditProposal } from "../types";
-
-function findOccurrences(content: string, needle: string): number[] {
-  if (!needle) return [];
-
-  const matches: number[] = [];
-  let cursor = 0;
-
-  while (cursor <= content.length - needle.length) {
-    const index = content.indexOf(needle, cursor);
-    if (index === -1) break;
-
-    matches.push(index);
-    cursor = index + needle.length;
-  }
-
-  return matches;
-}
+import { planReplacement } from "./replacement";
 
 /**
  * Owns user-approved Markdown mutations.
  *
- * Agent output is only a proposal. This service revalidates the target at
- * apply-time and refuses stale or ambiguous replacements.
+ * Forge v1 only mutates the active turn's primary Markdown note through an
+ * open Obsidian editor. Supporting notes remain read-only context so Apply
+ * always participates in native editor history and Ctrl/Cmd+Z remains valid.
  */
 export class MutationService {
   constructor(private readonly app: App) {}
 
   async apply(
     proposal: EditProposal,
-    allowedFiles: readonly string[],
+    mutableFile?: string,
   ): Promise<ApplyResult> {
-    if (!allowedFiles.includes(proposal.file)) {
+    if (!mutableFile || proposal.file !== mutableFile) {
       return {
         ok: false,
         reason: "unauthorized",
-        message: "This edit targets a note outside the approved turn context.",
+        message:
+          "Forge can only edit the primary note used for this turn.",
       };
     }
 
@@ -50,71 +36,74 @@ export class MutationService {
     }
 
     try {
-      const activeFile = this.app.workspace.getActiveFile();
-      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      const targetView = this.findOpenMarkdownView(file.path);
 
-      if (activeFile?.path === file.path && activeView?.editor) {
-        const editor = activeView.editor;
-        const content = editor.getValue();
-        const matches = findOccurrences(content, proposal.original);
-
-        if (matches.length === 0) {
-          return {
-            ok: false,
-            reason: "stale",
-            message: "Note changed since the proposal was made. Regenerate the edit.",
-          };
-        }
-
-        if (matches.length > 1) {
-          return {
-            ok: false,
-            reason: "ambiguous",
-            message: "The original text occurs more than once. Regenerate with a more specific selection.",
-          };
-        }
-
-        const index = matches[0];
-        const from = editor.offsetToPos(index);
-        const to = editor.offsetToPos(index + proposal.original.length);
-
-        editor.replaceRange(proposal.replacement, from, to);
-        return { ok: true };
+      if (!targetView) {
+        return {
+          ok: false,
+          reason: "no-editor",
+          message:
+            "Open the target note in an editor before applying this change.",
+        };
       }
 
-      const content = await this.app.vault.cachedRead(file);
-      const matches = findOccurrences(content, proposal.original);
+      const editor = targetView.editor;
+      const content = editor.getValue();
+      const plan = planReplacement(
+        content,
+        proposal.original,
+        proposal.replacement,
+      );
 
-      if (matches.length === 0) {
+      if (!plan.ok && plan.reason === "stale") {
         return {
           ok: false,
           reason: "stale",
-          message: "Note changed since the proposal was made. Regenerate the edit.",
+          message:
+            "Note changed since the proposal was made. Regenerate the edit.",
         };
       }
 
-      if (matches.length > 1) {
+      if (!plan.ok) {
         return {
           ok: false,
           reason: "ambiguous",
-          message: "The original text occurs more than once. Regenerate with a more specific selection.",
+          message:
+            "The original text occurs more than once. Regenerate with a more specific selection.",
         };
       }
 
-      const index = matches[0];
-      const next =
-        content.slice(0, index) +
-        proposal.replacement +
-        content.slice(index + proposal.original.length);
+      const from = editor.offsetToPos(plan.index);
+      const to = editor.offsetToPos(
+        plan.index + proposal.original.length,
+      );
 
-      await this.app.vault.modify(file, next);
+      editor.replaceRange(proposal.replacement, from, to);
       return { ok: true };
-    } catch (err) {
+    } catch (error) {
       return {
         ok: false,
         reason: "error",
-        message: err instanceof Error ? err.message : String(err),
+        message:
+          error instanceof Error
+            ? error.message
+            : String(error),
       };
     }
+  }
+
+  private findOpenMarkdownView(
+    path: string,
+  ): MarkdownView | null {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      if (
+        leaf.view instanceof MarkdownView &&
+        leaf.view.file?.path === path
+      ) {
+        return leaf.view;
+      }
+    }
+
+    return null;
   }
 }
