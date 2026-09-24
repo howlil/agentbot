@@ -1,12 +1,17 @@
 import {
   AgentContext,
+  AgentFailure,
+  AgentHealth,
   ApplyResult,
   AgentModel,
   ChatSession,
   EditProposal,
 } from "../types";
 import { ContextResolver } from "../context/ContextResolver";
-import { LearningContext } from "../context/context-types";
+import {
+  LearningContext,
+  TurnContextSnapshot,
+} from "../context/context-types";
 import { PolicyLoader } from "../context/PolicyLoader";
 import { MutationService } from "../mutation/MutationService";
 import { VaultLearningStore } from "../persistence/VaultLearningStore";
@@ -16,7 +21,11 @@ import {
   buildPracticeEvaluationInstruction,
   buildPracticeQuestionInstruction,
 } from "./action-builders";
-import { LearningEvent, LearningRequest } from "./learning-types";
+import {
+  LearningEvent,
+  LearningRequest,
+  ProposedEdit,
+} from "./learning-types";
 import {
   PracticeEvaluation,
   PracticeQuestion,
@@ -36,6 +45,14 @@ import {
  */
 export class LearningController {
   private practiceSession: PracticeSession | null = null;
+  private activeTurn: {
+    controller: AbortController;
+    cancelReason?: "user" | "timeout" | "dispose";
+  } | null = null;
+  private readonly pendingProposals = new Map<
+    string,
+    { proposal: EditProposal; allowedFiles: readonly string[] }
+  >();
 
   constructor(
     private readonly sessions: SessionController,
@@ -45,8 +62,8 @@ export class LearningController {
     private readonly learningState: VaultLearningStore,
   ) {}
 
-  async ping(): Promise<string> {
-    return this.sessions.ping();
+  checkRuntime(): Promise<AgentHealth> {
+    return this.sessions.checkRuntime();
   }
 
   getSession(): ChatSession {
@@ -57,7 +74,7 @@ export class LearningController {
     return this.sessions.getModels();
   }
 
-  setModel(modelId: string): void {
+  setModel(modelId?: string): void {
     this.sessions.setModel(modelId);
   }
 
@@ -73,26 +90,30 @@ export class LearningController {
   }
 
   async *run(request: LearningRequest): AsyncIterable<LearningEvent> {
-    const context = await this.contexts.resolve(request.explicitContext);
-    yield {
-      type: "context-ready",
-      context,
-    };
+    if (this.activeTurn) {
+      yield {
+        type: "failed",
+        failure: { code: "busy", message: "Another Forge turn is still running." },
+      };
+      return;
+    }
 
+    const context = await this.contexts.resolve(request.explicitContext);
     const [policy, state] = await Promise.all([
       this.policies.load(),
       this.learningState.load(),
     ]);
 
-    const agentContext = this.contexts.toAgentContext(context);
+    const visible = this.contexts.toAgentContext(context);
+    const system: AgentContext[] = [];
 
     if (policy.rawInstructions) {
-      const alreadyIncluded = agentContext.some(
+      const alreadyIncluded = visible.some(
         (item) => item.type === "note" && item.file === policy.path,
       );
 
       if (!alreadyIncluded) {
-        agentContext.push({
+        system.push({
           type: "note",
           file: policy.path,
           content: policy.rawInstructions,
@@ -100,11 +121,25 @@ export class LearningController {
       }
     }
 
-    agentContext.push({
+    system.push({
       type: "note",
       file: "00-learning-os/progress.json",
       content: JSON.stringify(state, null, 2),
     });
+
+    const snapshot: TurnContextSnapshot = {
+      resolved: context,
+      visible,
+      system,
+      allowedMutationFiles: Array.from(
+        new Set(
+          visible
+            .filter((item) => !item.file.startsWith("attachment/"))
+            .map((item) => item.file),
+        ),
+      ),
+    };
+    yield { type: "context-ready", context: snapshot };
 
     let preparedPrompt: string;
 
@@ -140,61 +175,141 @@ export class LearningController {
     }
 
     const parser = new StructuredStreamParser();
+    const controller = new AbortController();
+    const activeTurn = { controller } as {
+      controller: AbortController;
+      cancelReason?: "user" | "timeout" | "dispose";
+    };
+    this.activeTurn = activeTurn;
+    const timeout = setTimeout(() => {
+      activeTurn.cancelReason = "timeout";
+      controller.abort();
+    }, 60_000);
+    let visibleText = "";
 
-    for await (const event of this.sessions.sendTurn(
-      preparedPrompt,
-      agentContext,
-      request.prompt,
-    )) {
-      if (event.type === "text") {
-        for await (const mapped of this.mapStructuredEvents(
-          parser.push(event.content),
-          request,
-          context,
-        )) {
-          yield mapped;
+    try {
+      for await (const event of this.sessions.sendTurn(
+        preparedPrompt,
+        [...snapshot.visible, ...snapshot.system],
+        request.prompt,
+        controller.signal,
+      )) {
+        if (event.type === "text") {
+          for await (const mapped of this.mapStructuredEvents(
+            parser.push(event.content),
+            request,
+            snapshot,
+          )) {
+            if (mapped.type === "response-delta") visibleText += mapped.text;
+            if (mapped.type === "mutation-proposed") {
+              await this.sessions.recordAssistantMessage(visibleText);
+              visibleText = "";
+              await this.sessions.recordProposal(
+                mapped.edit.id,
+                mapped.edit.proposal,
+              );
+            }
+            yield mapped;
+          }
+          continue;
         }
-        continue;
-      }
 
-      if (event.type === "done") {
-        for await (const mapped of this.mapStructuredEvents(
-          parser.finish(),
-          request,
-          context,
-        )) {
-          yield mapped;
+        if (event.type === "completed") {
+          for await (const mapped of this.mapStructuredEvents(
+            parser.finish(),
+            request,
+            snapshot,
+          )) {
+            if (mapped.type === "response-delta") visibleText += mapped.text;
+            if (mapped.type === "mutation-proposed") {
+              await this.sessions.recordAssistantMessage(visibleText);
+              visibleText = "";
+              await this.sessions.recordProposal(
+                mapped.edit.id,
+                mapped.edit.proposal,
+              );
+            }
+            yield mapped;
+          }
+          await this.sessions.recordAssistantMessage(visibleText);
+          yield { type: "completed" };
+          return;
         }
 
-        yield { type: "completed" };
-        continue;
-      }
+        if (event.type === "failed") {
+          yield { type: "failed", failure: event.failure };
+          return;
+        }
 
-      if (event.type === "error") {
-        yield {
-          type: "error",
-          message: event.error,
-        };
+        if (activeTurn.cancelReason === "timeout") {
+          yield {
+            type: "failed",
+            failure: {
+              code: "timeout",
+              message: "No response after 60 seconds. The agent runtime may be busy.",
+            },
+          };
+        } else {
+          yield { type: "cancelled" };
+        }
+        return;
       }
+    } catch (error) {
+      const failure: AgentFailure = {
+        code: "protocol-invalid",
+        message: "Forge could not interpret the agent response.",
+        diagnostic: error instanceof Error ? error.message : String(error),
+      };
+      yield { type: "failed", failure };
+    } finally {
+      clearTimeout(timeout);
+      if (this.activeTurn === activeTurn) this.activeTurn = null;
     }
   }
 
-  applyProposal(proposal: EditProposal): Promise<ApplyResult> {
-    return this.mutations.apply(proposal);
+  async applyProposal(proposalId: string): Promise<ApplyResult> {
+    const pending = this.pendingProposals.get(proposalId);
+    if (!pending) {
+      return {
+        ok: false,
+        reason: "stale",
+        message: "This proposal is no longer active. Regenerate the edit.",
+      };
+    }
+
+    const result = await this.mutations.apply(
+      pending.proposal,
+      pending.allowedFiles,
+    );
+    this.pendingProposals.delete(proposalId);
+    await this.sessions.updateProposalState(
+      proposalId,
+      result.ok ? "applied" : "stale",
+    );
+    return result;
+  }
+
+  async rejectProposal(proposalId: string): Promise<void> {
+    this.pendingProposals.delete(proposalId);
+    await this.sessions.updateProposalState(proposalId, "rejected");
   }
 
   cancel(): void {
-    this.sessions.cancel();
+    if (!this.activeTurn) return;
+    this.activeTurn.cancelReason = "user";
+    this.activeTurn.controller.abort();
   }
 
   dispose(): void {
-    this.sessions.destroy();
+    if (!this.activeTurn) return;
+    this.activeTurn.cancelReason = "dispose";
+    this.activeTurn.controller.abort();
   }
 
   private async *mapStructuredEvents(
     events: StructuredStreamEvent[],
     request: LearningRequest,
-    context: LearningContext,
+    context: TurnContextSnapshot,
   ): AsyncIterable<LearningEvent> {
     for (const event of events) {
       if (event.type === "text") {
@@ -208,9 +323,22 @@ export class LearningController {
       }
 
       if (event.type === "proposal") {
+        if (!context.allowedMutationFiles.includes(event.proposal.file)) {
+          throw new Error(
+            `Edit target is outside the approved context: ${event.proposal.file}`,
+          );
+        }
+        const edit: ProposedEdit = {
+          id: crypto.randomUUID(),
+          proposal: event.proposal,
+        };
+        this.pendingProposals.set(edit.id, {
+          proposal: edit.proposal,
+          allowedFiles: context.allowedMutationFiles,
+        });
         yield {
           type: "mutation-proposed",
-          proposal: event.proposal,
+          edit,
         };
         continue;
       }
@@ -237,8 +365,8 @@ export class LearningController {
         };
 
         const source =
-          context.selection?.file ??
-          context.activeNote?.path ??
+          context.resolved.selection?.file ??
+          context.resolved.activeNote?.path ??
           "learning-session";
 
         const state =
@@ -269,10 +397,7 @@ export class LearningController {
         continue;
       }
 
-      yield {
-        type: "error",
-        message: event.message,
-      };
+      throw new Error(event.message);
     }
   }
 

@@ -23,3 +23,10 @@ export interface LearningPolicy {
   path: string;
   rawInstructions: string;
 }
+
+export interface TurnContextSnapshot {
+  resolved: LearningContext;
+  visible: import("../types").AgentContext[];
+  system: import("../types").AgentContext[];
+  allowedMutationFiles: string[];
+}

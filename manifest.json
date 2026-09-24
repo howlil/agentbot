@@ -1,0 +1,10 @@
+{
+  "id": "forge-obsidian",
+  "name": "Forge",
+  "version": "0.0.1",
+  "minAppVersion": "1.4.0",
+  "description": "AI learning companion for Obsidian with a pluggable agent runtime",
+  "author": "Howlil",
+  "authorUrl": "https://github.com/howlil",
+  "isDesktopOnly": true
+}

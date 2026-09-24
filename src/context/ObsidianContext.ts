@@ -1,5 +1,4 @@
 import { App, TFile } from "obsidian";
-import { AgentContext } from "../types";
 
 /**
  * ObsidianContext — resolves context from the active Obsidian workspace.
@@ -34,41 +33,4 @@ export class ObsidianContext {
     return { file: file.path, content };
   }
 
-  /**
-   * Resolve the automatic context for a new turn.
-   * Returns [selection] if present, else [current-note].
-   */
-  async resolveAuto(): Promise<AgentContext[]> {
-    const sel = this.getSelection();
-    if (sel) {
-      return [{ type: "selection", file: sel.file, content: sel.content }];
-    }
-    const note = await this.getCurrentNote();
-    if (note) {
-      return [{ type: "note", file: note.file, content: note.content }];
-    }
-    return [];
-  }
-
-  /**
-   * Load a specific file by path for @mention context.
-   * Returns null if file does not exist.
-   */
-  async loadFile(path: string): Promise<AgentContext | null> {
-    const file = this.app.vault.getFileByPath(path);
-    if (!file || !(file instanceof TFile)) return null;
-    const content = await this.app.vault.cachedRead(file);
-    return { type: "note", file: path, content };
-  }
-
-  /**
-   * Verify that `original` still exists verbatim in the active file.
-   * Used before Apply to detect stale proposals.
-   */
-  async verifyOriginal(filePath: string, original: string): Promise<boolean> {
-    const file = this.app.vault.getFileByPath(filePath);
-    if (!file || !(file instanceof TFile)) return false;
-    const content = await this.app.vault.cachedRead(file);
-    return content.includes(original);
-  }
 }

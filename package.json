@@ -1,8 +1,16 @@
 {
   "name": "forge-obsidian",
   "version": "0.0.1",
-  "description": "Forge learning companion for Obsidian with a pluggable agent runtime",
+  "description": "Forge is an AI learning companion for Obsidian with a pluggable agent runtime",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/howlil/forge.git"
+  },
+  "homepage": "https://github.com/howlil/forge",
+  "bugs": {
+    "url": "https://github.com/howlil/forge/issues"
+  },
   "main": "dist/main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -11,7 +19,12 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "ai",
+    "learning"
+  ],
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",
     "@types/node": "^22.0.0",

@@ -2,6 +2,7 @@ import { Plugin } from "obsidian";
 import { SessionStore } from "./SessionStore";
 import {
   AgentAdapter,
+  AgentHealth,
   AgentContext,
   AgentInput,
   AgentModel,
@@ -35,18 +36,15 @@ export class SessionController {
       this.currentSession = this.store.createSession(this.store.getDefaultModel());
     }
 
-    this.adapter
-      .listModels()
-      .then((models) => {
-        this.models = models;
-      })
-      .catch(() => {
-        // Model discovery is best-effort; the persisted default remains usable.
-      });
+    try {
+      this.models = await this.adapter.listModels();
+    } catch {
+      this.models = [];
+    }
   }
 
-  ping(): Promise<string> {
-    return this.adapter.ping();
+  checkRuntime(): Promise<AgentHealth> {
+    return this.adapter.check();
   }
 
   getSession(): ChatSession {
@@ -61,11 +59,12 @@ export class SessionController {
     return this.currentSession;
   }
 
-  setModel(modelId: string): void {
-    this.store.setDefaultModel(modelId);
+  setModel(modelId?: string): void {
+    const normalized = modelId || undefined;
+    this.store.setDefaultModel(normalized);
 
     if (this.currentSession) {
-      this.currentSession.model = modelId;
+      this.currentSession.model = normalized;
       this.store.updateSession(this.currentSession);
       void this.save();
     }
@@ -84,8 +83,9 @@ export class SessionController {
    */
   async *sendTurn(
     prompt: string,
-    context: AgentContext[] = [],
-    displayPrompt: string = prompt,
+    context: AgentContext[],
+    displayPrompt: string,
+    signal: AbortSignal,
   ): AsyncIterable<AgentStreamEvent> {
     const session = this.getSession();
     const input: AgentInput = { prompt, context };
@@ -95,43 +95,63 @@ export class SessionController {
       content: displayPrompt,
     });
 
-    let fullText = "";
+    this.store.updateSession(session);
+    await this.save();
 
     for await (const event of this.adapter.send(input, {
       model: session.model,
       conversationId: session.conversationId,
-    })) {
-      if (event.type === "text") {
-        fullText += event.content;
-      }
-
-      if (event.type === "done" && event.conversationId) {
+    }, signal)) {
+      if (event.type === "completed" && event.conversationId) {
         session.conversationId = event.conversationId;
       }
 
       yield event;
     }
 
-    if (fullText) {
-      session.messages.push({
-        role: "assistant",
-        content: fullText,
-      });
-    }
-
     this.store.updateSession(session);
     await this.save();
   }
 
-  cancel(): void {
-    this.adapter.abort();
+  async recordAssistantMessage(content: string): Promise<void> {
+    if (!content.trim()) return;
+    const session = this.getSession();
+    session.messages.push({ role: "assistant", content });
+    this.store.updateSession(session);
+    await this.save();
   }
 
-  destroy(): void {
-    this.adapter.abort();
+  async recordProposal(
+    proposalId: string,
+    proposal: import("../types").EditProposal,
+  ): Promise<void> {
+    const session = this.getSession();
+    session.messages.push({
+      role: "assistant",
+      content: "",
+      proposalId,
+      proposal,
+      proposalState: "pending",
+    });
+    this.store.updateSession(session);
+    await this.save();
+  }
+
+  async updateProposalState(
+    proposalId: string,
+    state: "applied" | "rejected" | "stale",
+  ): Promise<void> {
+    const message = this.getSession().messages.find(
+      (item) => item.proposalId === proposalId,
+    );
+    if (!message) return;
+    message.proposalState = state;
+    this.store.updateSession(this.getSession());
+    await this.save();
   }
 
   private async save(): Promise<void> {
-    await this.plugin.saveData(this.store.serialize());
+    const current = (await this.plugin.loadData()) ?? {};
+    await this.plugin.saveData({ ...current, ...this.store.serialize() });
   }
 }

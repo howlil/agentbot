@@ -36,7 +36,7 @@ Forge sidebar
 ├── Header
 │   ├── Forge identity
 │   ├── New session
-│   └── Ask / Explain / Practice / Review / Edit modes
+│   └── Compact mode actions / progressive command menu
 ├── Thread
 │   ├── Empty / context-ready slate
 │   ├── User request
@@ -160,9 +160,10 @@ small layered shadows; menus may be raised, but avoid large soft SaaS shadows.
 
 ### Header and modes
 
-Keep the header compact. Identity, model/session actions, and mode selection
-must remain visually distinct without extra navigation. Mode selection uses a
-quiet surface change and purple only for the active AI state.
+Keep the header compact. Identity and session actions remain visible without
+extra navigation. Mode selection may be exposed through compact empty-state
+actions or the progressive `/` command menu; do not add a second navigation bar
+just to expose modes. Purple is reserved for the active AI state.
 
 ### Thread and messages
 

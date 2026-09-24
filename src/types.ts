@@ -18,10 +18,28 @@ export interface AgentTurnInput {
   content: string;
 }
 
+export type AgentFailureCode =
+  | "runtime-unavailable"
+  | "permission-required"
+  | "protocol-invalid"
+  | "process-failed"
+  | "unknown";
+
+export interface AgentFailure {
+  code: AgentFailureCode;
+  message: string;
+  diagnostic?: string;
+}
+
+export type AgentHealth =
+  | { status: "ready" }
+  | { status: "unavailable" | "misconfigured"; failure: AgentFailure };
+
 export type AgentStreamEvent =
   | { type: "text"; content: string }
-  | { type: "done"; conversationId?: string }
-  | { type: "error"; error: string };
+  | { type: "completed"; conversationId?: string }
+  | { type: "failed"; failure: AgentFailure }
+  | { type: "cancelled" };
 
 // ── Mutation proposal ───────────────────────────────────────────────────────
 
@@ -39,6 +57,7 @@ export type ApplyResult =
       reason:
         | "stale"
         | "ambiguous"
+        | "unauthorized"
         | "missing-file"
         | "no-editor"
         | "error";
@@ -50,6 +69,7 @@ export type ApplyResult =
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  proposalId?: string;
   proposal?: EditProposal;
   proposalState?: "pending" | "applied" | "rejected" | "stale";
 }
@@ -57,7 +77,7 @@ export interface ChatMessage {
 export interface ChatSession {
   id: string;
   conversationId?: string;
-  model: string;
+  model?: string;
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
@@ -71,19 +91,23 @@ export interface AgentModel {
 // ── Agent runtime boundary ──────────────────────────────────────────────────
 
 export interface AgentAdapter {
-  ping(): Promise<string>;
+  check(): Promise<AgentHealth>;
 
   send(
     input: AgentInput,
     opts: SendOptions,
+    signal: AbortSignal,
   ): AsyncIterable<AgentStreamEvent>;
 
   listModels(): Promise<AgentModel[]>;
 
-  abort(): void;
+}
+
+export interface AgentRuntimeConfig {
+  executablePath?: string;
 }
 
 export interface SendOptions {
-  model: string;
+  model?: string;
   conversationId?: string;
 }

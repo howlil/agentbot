@@ -41,6 +41,7 @@ explicit request.
 | `src/persistence/VaultLearningStore.ts` | Durable evidence-backed learning progress |
 | `src/session/` | Conversation and model persistence |
 | `src/agent/AgyAdapter.ts` | Current provider process/protocol adapter behind `AgentAdapter` |
+| `public/forge.png` | Canonical Forge brand asset used by product surfaces |
 | `styles.css` | Tailwind v4 CSS entry with theme-aware Forge styles |
 | `DESIGN.md` | Forge interface graph, semantic tokens, and design acceptance gates |
 | `dist/` | Generated build artifacts; never edit directly |
@@ -137,9 +138,32 @@ dashboard-like surfaces or decorative complexity.
 Read `DESIGN.md` before changing UI. Use its interface graph, semantic tokens,
 radius/spacing scale, and acceptance test as the default design contract. Keep
 the existing purple `--interactive-accent`; do not introduce hard-coded visual
-tokens, decorative gradients, or unrelated component variants. If a change
-adds a consequential interaction or AI state, update the graph and verify the
-new state at the same boundary.
+tokens, decorative gradients, or unrelated component variants. Treat a
+reference screenshot as a composition reference, not permission to enlarge
+the UI beyond the design system.
+
+### Compact visual contract
+
+Every UI change must remain inside the visual rules in `DESIGN.md`:
+
+- Use `6px / 8px / 10px / 14px / pill` for radii; do not invent larger
+  everyday card or control radii.
+- Use `4px / 6px / 8px / 10px / 12px / 16px / 24px` spacing steps.
+- Keep normal UI at `12–14px`, major headings near `21px`, and controls at
+  approximately `28px` high.
+- Prefer semantic Forge tokens and hairline borders. Purple communicates
+  active AI state, focus, selection, or an intentional primary action.
+- Reject gradients, oversized hero composition, giant controls, broad shadows,
+  decorative badges, and cards without a responsibility boundary.
+- Use `public/forge.png` for Forge brand marks. Do not recreate the logo with
+  text glyphs, unrelated Lucide icons, or a second inline artwork variant.
+- Before finishing, compare the changed surface against the `DESIGN.md`
+  acceptance test and run the UI verification gate.
+
+If a requested visual reference conflicts with these rules, preserve the
+compact Forge system and extract only the reference's hierarchy and interaction
+behavior. If a new interaction or AI state is consequential, update the graph
+and verify that state at the same boundary.
 
 ## 5. Verification gates
 

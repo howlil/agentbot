@@ -9,7 +9,8 @@ import {
   PracticeEvaluation,
   PracticeQuestion,
 } from "../learning/practice-types";
-import { AgentContext, EditProposal } from "../types";
+import { AgentContext, ChatMessage, EditProposal } from "../types";
+import { ProposedEdit } from "../learning/learning-types";
 
 export const FORGE_VIEW_TYPE = "forge-sidebar";
 
@@ -70,7 +71,9 @@ export class ChatView extends ItemView {
   private sendBtn!: HTMLButtonElement;
   private selectionChip!: HTMLElement;
   private noteChip!: HTMLElement;
+  private systemChip!: HTMLElement;
   private cancelBtn!: HTMLButtonElement;
+  private contextSelect!: HTMLButtonElement;
   private modelSelect!: HTMLSelectElement;
   private dictationBtn!: HTMLButtonElement;
   private fileInput!: HTMLInputElement;
@@ -112,6 +115,8 @@ export class ChatView extends ItemView {
   constructor(
     leaf: WorkspaceLeaf,
     private readonly learning: LearningController,
+    private readonly openSettings: () => void,
+    private readonly getLogoUrl: () => string,
   ) {
     super(leaf);
   }
@@ -125,7 +130,7 @@ export class ChatView extends ItemView {
   }
 
   getIcon() {
-    return "sparkles";
+    return "forge-logo";
   }
 
   async onOpen(): Promise<void> {
@@ -139,14 +144,18 @@ export class ChatView extends ItemView {
     this.buildComposer(this.composer);
 
     try {
-      await this.learning.ping();
-    } catch (err) {
-      this.showError(this.runtimeErrorMessage(err));
+      const health = await this.learning.checkRuntime();
+      if (health.status !== "ready") {
+        this.showError(health.failure.message);
+        return;
+      }
+    } catch {
+      this.showError("Agent runtime is unavailable. Check Forge runtime settings.");
       return;
     }
 
     await this.syncChips();
-    this.showEmpty();
+    await this.restoreSession();
 
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => {
@@ -171,21 +180,24 @@ export class ChatView extends ItemView {
     this.stopLoadingTimer();
   }
 
+  focusComposer(): void {
+    this.input?.focus();
+  }
+
   private buildHeader(root: HTMLElement): void {
     this.headerEl = root.createDiv({ cls: "forge-header" });
     const top = this.headerEl.createDiv({ cls: "forge-header-top" });
     const brand = top.createDiv({ cls: "forge-header-brand" });
-    brand.createSpan({ cls: "forge-header-mark", text: "✦" });
+    brand.createEl("img", {
+      cls: "forge-header-logo",
+      attr: {
+        src: this.getLogoUrl(),
+        alt: "Forge",
+      },
+    });
 
     const copy = brand.createDiv({ cls: "forge-header-copy" });
-    copy.createSpan({
-      cls: "forge-header-title",
-      text: "Forge",
-    });
-    copy.createSpan({
-      cls: "forge-header-subtitle",
-      text: "Learning OS",
-    });
+    copy.createSpan({ cls: "forge-header-title", text: "Forge" });
 
     const right = top.createDiv({ cls: "forge-header-right" });
 
@@ -207,8 +219,16 @@ export class ChatView extends ItemView {
       this.showEmpty();
     });
 
-    const tabs = this.headerEl.createDiv({ cls: "forge-mode-tabs" });
-    this.buildActionButtons(tabs);
+    const moreBtn = right.createEl("button", {
+      cls: "forge-more-btn",
+      text: "⋯",
+      attr: {
+        type: "button",
+        "aria-label": "Open Forge settings",
+      },
+    });
+    moreBtn.title = "Forge settings";
+    moreBtn.addEventListener("click", () => this.openSettings());
   }
 
   private buildActionButtons(parent: HTMLElement): void {
@@ -234,15 +254,14 @@ export class ChatView extends ItemView {
   private async refreshModelList(): Promise<void> {
     let models = this.learning.getModels();
 
-    if (models.length === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      models = this.learning.getModels();
-    }
-
-    if (models.length === 0) return;
-
     this.modelSelect.empty();
     const currentModel = this.learning.getSession().model;
+
+    const defaultOption = this.modelSelect.createEl("option", {
+      value: "",
+      text: "Runtime default",
+    });
+    defaultOption.selected = !currentModel;
 
     for (const model of models) {
       const option = this.modelSelect.createEl("option", {
@@ -279,6 +298,15 @@ export class ChatView extends ItemView {
     this.noteChip.createSpan({
       cls: "forge-chip-label",
       text: "@note",
+    });
+
+    this.systemChip = chips.createSpan({
+      cls: "forge-chip forge-chip--hidden",
+    });
+    this.systemChip.createSpan({ cls: "forge-chip-dot" });
+    this.systemChip.createSpan({
+      cls: "forge-chip-label",
+      text: "@forge-system",
     });
 
     const anchor = parent.createDiv({ cls: "forge-prompt-anchor" });
@@ -331,7 +359,7 @@ export class ChatView extends ItemView {
     this.input = controls.createEl("textarea", {
       cls: "forge-input",
       attr: {
-        placeholder: "Ask about what you're learning…",
+        placeholder: "Ask anything about this note...",
         rows: "1",
       },
     });
@@ -340,6 +368,21 @@ export class ChatView extends ItemView {
 
     const footer = box.createDiv({ cls: "forge-composer-footer" });
     const tools = footer.createDiv({ cls: "forge-composer-tools" });
+
+    this.contextSelect = tools.createEl("button", {
+      cls: "forge-context-select",
+      text: "Current note",
+      attr: {
+        type: "button",
+        "aria-label": "Choose context",
+      },
+    });
+    this.contextSelect.addEventListener("click", () => {
+      this.promptMenu = this.promptMenu === "source" ? null : "source";
+      this.promptMenuActive = 0;
+      this.renderPromptMenu();
+      this.input.focus();
+    });
 
     this.modelSelect = tools.createEl("select", {
       cls: "forge-model-select",
@@ -379,9 +422,7 @@ export class ChatView extends ItemView {
     this.cancelBtn.setAttribute("aria-label", "Stop generating");
     this.cancelBtn.addEventListener("click", () => {
       this.learning.cancel();
-      this.setUIState("ANSWER");
-      this.appendInlineError(this.thread, "Stopped.");
-      this.finishStreamingBubble("Stopped");
+      this.cancelBtn.disabled = true;
     });
 
     this.sendBtn = btnGroup.createEl("button", {
@@ -666,7 +707,7 @@ export class ChatView extends ItemView {
 
   private updatePlaceholder(): void {
     const placeholders: Record<LearningActionKind, string> = {
-      ask: "Ask about what you're learning…",
+      ask: "Ask anything about this note...",
       explain: "What should I explain?",
       practice: "What should we practice?",
       review: "What should I review?",
@@ -681,19 +722,30 @@ export class ChatView extends ItemView {
   private async syncChips(): Promise<void> {
     const context = await this.learning.resolveContext(this.extraCtx);
     this.currentContext = context;
+    this.systemChip.addClass("forge-chip--hidden");
 
     const hasSelection = Boolean(context.selection);
-    this.selectionChip.toggleClass("agy-chip--hidden", !hasSelection);
+    this.selectionChip.toggleClass("forge-chip--hidden", !hasSelection);
 
     const activeNote = context.activeNote;
-    this.noteChip.toggleClass("agy-chip--hidden", !activeNote);
+    this.noteChip.toggleClass("forge-chip--hidden", !activeNote);
 
     if (activeNote) {
       const name = activeNote.path.split("/").pop() ?? activeNote.path;
-      const label = this.noteChip.querySelector<HTMLElement>(".agy-chip-label");
+      const label = this.noteChip.querySelector<HTMLElement>(".forge-chip-label");
       if (label) label.textContent = `@${name}`;
       this.noteChip.title = activeNote.path;
     }
+
+    const sourceName = context.selection
+      ? "Current selection"
+      : activeNote
+        ? "Current note"
+        : this.extraCtx.length > 0
+          ? `${this.extraCtx.length} sources`
+          : "No context";
+    this.contextSelect.textContent = sourceName;
+    this.contextSelect.title = context.selection?.file ?? activeNote?.path ?? sourceName;
   }
 
   private onInput(): void {
@@ -766,8 +818,8 @@ export class ChatView extends ItemView {
     this.renderAttachments();
     this.sendBtn.disabled = true;
 
-    this.agyCursorEl = null;
-    this.agyContentEl = null;
+    this.agentCursorEl = null;
+    this.agentContentEl = null;
     this.statusEl = null;
     this.streamedResponseText = "";
     this.streamingPendingText = "";
@@ -778,50 +830,34 @@ export class ChatView extends ItemView {
     this.setUIState("RUNNING");
     this.ensureAgentBubble();
 
-    const timeout = window.setTimeout(() => {
-      this.learning.cancel();
-      this.setUIState("ANSWER");
-      this.finishStreamingBubble("Timed out");
-      this.appendInlineError(
-        this.thread,
-        "No response after 60 s. The agent runtime may be busy.",
-      );
-    }, 60_000);
-
     try {
       for await (const event of this.learning.run({
         prompt,
         action: this.selectedAction,
         explicitContext,
       })) {
-        this.handleLearningEvent(event, timeout);
+        this.handleLearningEvent(event);
       }
     } catch (err) {
-      window.clearTimeout(timeout);
       this.finishStreamingBubble("Stopped");
 
       const message =
         err instanceof Error ? err.message : String(err);
 
-      if (message.includes("not found") || message.includes("ENOENT")) {
-        this.showError("Agent runtime not found. Check Forge runtime settings.");
-      } else {
-        console.warn("[Forge] Agent runtime error", message);
-        this.appendInlineError(
-          this.thread,
-          this.runtimeErrorMessage(err),
-        );
-        this.setUIState("ANSWER");
-      }
+      console.warn("[Forge] Unexpected turn failure", message);
+      this.appendInlineError(
+        this.thread,
+        "Forge hit an unexpected error. Try again.",
+      );
+      this.setUIState("ANSWER");
     }
   }
 
-  private handleLearningEvent(
-    event: LearningEvent,
-    timeout: number,
-  ): void {
+  private handleLearningEvent(event: LearningEvent): void {
     if (event.type === "context-ready") {
-      this.currentContext = event.context;
+      this.currentContext = event.context.resolved;
+      this.systemChip.toggleClass("forge-chip--hidden", event.context.system.length === 0);
+      this.systemChip.title = event.context.system.map((item) => item.file).join("\n");
       return;
     }
 
@@ -849,12 +885,11 @@ export class ChatView extends ItemView {
 
     if (event.type === "mutation-proposed") {
       this.setUIState("PROPOSAL");
-      this.appendProposalBubble(event.proposal);
+      this.appendProposalBubble(event.edit);
       return;
     }
 
     if (event.type === "completed") {
-      window.clearTimeout(timeout);
       if (this.uiState === "RUNNING") {
         this.setUIState("ANSWER");
       }
@@ -862,14 +897,16 @@ export class ChatView extends ItemView {
       return;
     }
 
-    if (event.type === "error") {
-      window.clearTimeout(timeout);
+    if (event.type === "cancelled") {
+      this.finishStreamingBubble("Stopped");
+      this.appendInlineError(this.thread, "Stopped.");
+      this.setUIState("ANSWER");
+      return;
+    }
+
+    if (event.type === "failed") {
       this.finishStreamingBubble("Unable to finish");
-      console.warn("[Forge] Agent runtime error", event.message);
-      this.appendInlineError(
-        this.thread,
-        this.runtimeErrorMessage(event.message),
-      );
+      this.appendInlineError(this.thread, event.failure.message);
       this.setUIState("ANSWER");
     }
   }
@@ -883,9 +920,9 @@ export class ChatView extends ItemView {
     this.settleThinking(doneLabel ?? `Thought for ${elapsed}`);
     if (this.responseTimeEl) this.responseTimeEl.textContent = `for ${elapsed}`;
     this.stopLoadingTimer();
-    this.agyCursorEl?.removeClass("forge-bubble--streaming");
-    this.agyCursorEl = null;
-    this.agyContentEl = null;
+    this.agentCursorEl?.removeClass("forge-bubble--streaming");
+    this.agentCursorEl = null;
+    this.agentContentEl = null;
     this.statusEl = null;
     this.thinkingToggleEl = null;
     this.thinkingLabelEl = null;
@@ -1007,6 +1044,7 @@ export class ChatView extends ItemView {
     this.uiState = state;
 
     const busy = state === "RUNNING";
+    this.cancelBtn.disabled = false;
     this.input.disabled = busy || state === "ERROR";
     this.sendBtn.disabled =
       busy || state === "ERROR" || !this.canSend();
@@ -1020,31 +1058,20 @@ export class ChatView extends ItemView {
   private showEmpty(): void {
     this.stopLoadingTimer();
     this.thread.empty();
-    this.agyCursorEl = null;
+    this.agentCursorEl = null;
     this.statusEl = null;
 
     const slate = this.thread.createDiv({
       cls: "forge-empty-slate",
     });
-    slate.createDiv({
-      cls: "forge-empty-mark",
-      text: "✦",
+    slate.createEl("img", {
+      cls: "forge-empty-logo",
+      attr: {
+        src: this.getLogoUrl(),
+        alt: "Forge",
+      },
     });
-    slate.createDiv({
-      cls: "forge-empty-kicker",
-      text: "LEARNING OS",
-    });
-
-    let label = "Open a note or ask about your Learning OS.";
-
-    if (this.currentContext?.selection) {
-      label = "Selection ready — explain, practice, review, or edit it.";
-    } else if (this.currentContext?.activeNote) {
-      const name =
-        this.currentContext.activeNote.path.split("/").pop() ??
-        this.currentContext.activeNote.path;
-      label = `Learn with ${name}`;
-    }
+    const label = "What are you learning?";
 
     slate.createDiv({
       cls: "forge-empty-label",
@@ -1052,16 +1079,100 @@ export class ChatView extends ItemView {
     });
     slate.createDiv({
       cls: "forge-empty-hint",
-      text: "Ask, explain, practice, review, or edit from the current context.",
+      text: "Ask about the current note, or jump into a focused workflow when you need more than chat.",
     });
 
+    const quickActions = slate.createDiv({ cls: "forge-empty-actions" });
+    const quickActionMap: Array<[LearningActionKind, string]> = [
+      ["explain", "Explain this"],
+      ["practice", "Practice"],
+      ["edit", "Improve note"],
+    ];
+    for (const [action, text] of quickActionMap) {
+      const button = quickActions.createEl("button", {
+        cls: "forge-empty-action",
+        text,
+        attr: { type: "button" },
+      });
+      button.addEventListener("click", () => {
+        this.selectedAction = action;
+        this.syncActionButtons();
+        this.updatePlaceholder();
+        this.focusComposer();
+      });
+    }
+
     this.setUIState("EMPTY");
+  }
+
+  private async restoreSession(): Promise<void> {
+    const messages = this.learning.getSession().messages;
+    if (messages.length === 0) {
+      this.showEmpty();
+      return;
+    }
+
+    this.thread.empty();
+    for (const message of messages) {
+      if (message.role === "user") {
+        this.appendUserBubble(message.content);
+        continue;
+      }
+      if (message.content.trim()) {
+        await this.appendRestoredAssistant(message.content);
+      }
+      if (message.proposal) {
+        this.appendRestoredProposal(message);
+      }
+    }
+    this.setUIState("ANSWER");
+    this.scrollThread();
+  }
+
+  private async appendRestoredAssistant(markdown: string): Promise<void> {
+    const bubble = this.thread.createDiv({
+      cls: "forge-bubble forge-bubble--agent",
+    });
+    const meta = bubble.createDiv({ cls: "forge-response-meta" });
+    meta.createSpan({ cls: "forge-response-label", text: "Forge" });
+    meta.createSpan({ cls: "forge-response-sub", text: "Restored" });
+    const content = bubble.createDiv({
+      cls: "forge-bubble-content forge-markdown",
+    });
+    const sourcePath =
+      this.currentContext?.selection?.file ??
+      this.currentContext?.activeNote?.path ??
+      "Forge.md";
+    await MarkdownRenderer.render(
+      this.app,
+      markdown,
+      content,
+      sourcePath,
+      this,
+    );
+  }
+
+  private appendRestoredProposal(message: ChatMessage): void {
+    const proposal = message.proposal;
+    if (!proposal) return;
+    const wrap = this.renderProposal(proposal);
+    const state = message.proposalState ?? "stale";
+    const labels: Record<string, string> = {
+      applied: `✓ Applied to ${proposal.file}`,
+      rejected: "✕ Rejected",
+      stale: "⚠ Expired after restart",
+      pending: "⚠ Expired after restart",
+    };
+    wrap.createDiv({
+      cls: `forge-result-badge forge-badge--${state === "applied" ? "applied" : state === "rejected" ? "rejected" : "stale"}`,
+      text: labels[state],
+    });
   }
 
   private showError(message: string): void {
     this.stopLoadingTimer();
     this.thread.empty();
-    this.agyCursorEl = null;
+    this.agentCursorEl = null;
     this.statusEl = null;
 
     const slate = this.thread.createDiv({
@@ -1085,20 +1196,10 @@ export class ChatView extends ItemView {
       text: "Configure Forge →",
     });
     button.addEventListener("click", () => {
-      (this.app as any).setting?.open?.();
+      this.openSettings();
     });
 
     this.setUIState("ERROR");
-  }
-
-  private runtimeErrorMessage(error: unknown): string {
-    const message = error instanceof Error ? error.message : String(error);
-
-    if (message.includes("not found") || message.includes("ENOENT")) {
-      return "Agent runtime not found. Check Forge runtime settings.";
-    }
-
-    return "Forge could not complete the request. Check the agent runtime connection and try again.";
   }
 
   private appendUserBubble(text: string): void {
@@ -1110,21 +1211,21 @@ export class ChatView extends ItemView {
   }
 
   private ensureAgentBubble(): void {
-    if (this.agyCursorEl) return;
+    if (this.agentCursorEl) return;
 
     this.statusEl = this.buildThinkingTrace();
 
-    this.agyCursorEl = this.thread.createDiv({
+    this.agentCursorEl = this.thread.createDiv({
       cls: "forge-bubble forge-bubble--agent forge-bubble--streaming",
     });
-    const meta = this.agyCursorEl.createDiv({ cls: "forge-response-meta" });
+    const meta = this.agentCursorEl.createDiv({ cls: "forge-response-meta" });
     meta.createSpan({ cls: "forge-response-label", text: "Forge" });
     meta.createSpan({
       cls: "forge-response-sub",
       text: ACTIONS.find((action) => action.kind === this.selectedAction)?.label ?? "Response",
     });
     this.responseTimeEl = meta.createSpan({ cls: "forge-response-time", text: "for 0.0s" });
-    this.agyContentEl = this.agyCursorEl.createDiv({
+    this.agentContentEl = this.agentCursorEl.createDiv({
       cls: "forge-bubble-content",
     });
   }
@@ -1145,9 +1246,12 @@ export class ChatView extends ItemView {
     });
     this.thinkingToggleEl = toggle;
 
-    toggle.createSpan({
-      cls: "forge-thinking-icon",
-      text: "✦",
+    toggle.createEl("img", {
+      cls: "forge-thinking-logo",
+      attr: {
+        src: this.getLogoUrl(),
+        alt: "",
+      },
     });
 
     this.thinkingLabelEl = toggle.createSpan({
@@ -1227,7 +1331,7 @@ export class ChatView extends ItemView {
   }
 
   private appendToAgentBubble(text: string): void {
-    if (!this.agyContentEl) return;
+    if (!this.agentContentEl) return;
 
     this.streamedResponseText += text;
     this.streamingPendingText += text;
@@ -1246,11 +1350,11 @@ export class ChatView extends ItemView {
       if (!part) continue;
 
       if (/\s+/.test(part)) {
-        this.agyContentEl.appendText(part);
+        this.agentContentEl.appendText(part);
         continue;
       }
 
-      this.agyContentEl.createSpan({
+      this.agentContentEl.createSpan({
         cls: "forge-stream-word",
         text: part,
       });
@@ -1260,9 +1364,9 @@ export class ChatView extends ItemView {
   }
 
   private flushStreamingText(): void {
-    if (!this.agyContentEl || !this.streamingPendingText) return;
+    if (!this.agentContentEl || !this.streamingPendingText) return;
 
-    this.agyContentEl.createSpan({
+    this.agentContentEl.createSpan({
       cls: "forge-stream-word",
       text: this.streamingPendingText,
     });
@@ -1270,9 +1374,9 @@ export class ChatView extends ItemView {
   }
 
   private renderMarkdownResponse(): void {
-    if (!this.agyContentEl || !this.streamedResponseText.trim()) return;
+    if (!this.agentContentEl || !this.streamedResponseText.trim()) return;
 
-    const content = this.agyContentEl;
+    const content = this.agentContentEl;
     const markdown = this.streamedResponseText;
     const sourcePath =
       this.currentContext?.selection?.file ??
@@ -1291,10 +1395,10 @@ export class ChatView extends ItemView {
   }
 
   private appendStreamActions(): void {
-    if (!this.agyCursorEl || !this.streamedResponseText.trim()) return;
+    if (!this.agentCursorEl || !this.streamedResponseText.trim()) return;
 
     const responseText = this.streamedResponseText.trim();
-    const actions = this.agyCursorEl.createDiv({
+    const actions = this.agentCursorEl.createDiv({
       cls: "forge-stream-actions",
     });
     const copyButton = actions.createEl("button", {
@@ -1323,9 +1427,9 @@ export class ChatView extends ItemView {
   private appendPracticeQuestion(
     question: PracticeQuestion,
   ): void {
-    if (!this.agyCursorEl) return;
+    if (!this.agentCursorEl) return;
 
-    const card = this.agyCursorEl.createDiv({
+    const card = this.agentCursorEl.createDiv({
       cls: "forge-practice-card",
     });
     card.createDiv({
@@ -1350,9 +1454,9 @@ export class ChatView extends ItemView {
   private appendPracticeEvaluation(
     evaluation: PracticeEvaluation,
   ): void {
-    if (!this.agyCursorEl) return;
+    if (!this.agentCursorEl) return;
 
-    const card = this.agyCursorEl.createDiv({
+    const card = this.agentCursorEl.createDiv({
       cls: "forge-practice-evaluation",
     });
 
@@ -1392,40 +1496,9 @@ export class ChatView extends ItemView {
     this.scrollThread();
   }
 
-  private appendProposalBubble(proposal: EditProposal): void {
-    const wrap = this.thread.createDiv({
-      cls: "forge-proposal",
-    });
-
-    wrap.createDiv({
-      cls: "forge-proposal-badge",
-      text: "📄 " + proposal.file,
-    });
-
-    if (proposal.reason) {
-      wrap.createDiv({
-        cls: "forge-proposal-reason",
-        text: proposal.reason,
-      });
-    }
-
-    const diff = wrap.createDiv({
-      cls: "forge-proposal-diff",
-    });
-
-    proposal.original.split("\n").forEach((line) => {
-      diff.createDiv({
-        cls: "forge-diff-removed",
-        text: "- " + line,
-      });
-    });
-
-    proposal.replacement.split("\n").forEach((line) => {
-      diff.createDiv({
-        cls: "forge-diff-added",
-        text: "+ " + line,
-      });
-    });
+  private appendProposalBubble(edit: ProposedEdit): void {
+    const proposal = edit.proposal;
+    const wrap = this.renderProposal(proposal);
 
     const actions = wrap.createDiv({
       cls: "forge-proposal-actions",
@@ -1442,6 +1515,7 @@ export class ChatView extends ItemView {
     });
 
     rejectBtn.addEventListener("click", () => {
+      void this.learning.rejectProposal(edit.id);
       actions.remove();
       wrap.createDiv({
         cls: "forge-result-badge forge-badge--rejected",
@@ -1454,7 +1528,7 @@ export class ChatView extends ItemView {
       applyBtn.disabled = true;
       applyBtn.textContent = "Applying…";
 
-      const result = await this.learning.applyProposal(proposal);
+      const result = await this.learning.applyProposal(edit.id);
       actions.remove();
 
       if (result.ok) {
@@ -1473,6 +1547,25 @@ export class ChatView extends ItemView {
     });
 
     this.scrollThread();
+  }
+
+  private renderProposal(proposal: EditProposal): HTMLElement {
+    const wrap = this.thread.createDiv({ cls: "forge-proposal" });
+    wrap.createDiv({
+      cls: "forge-proposal-badge",
+      text: "📄 " + proposal.file,
+    });
+    if (proposal.reason) {
+      wrap.createDiv({ cls: "forge-proposal-reason", text: proposal.reason });
+    }
+    const diff = wrap.createDiv({ cls: "forge-proposal-diff" });
+    proposal.original.split("\n").forEach((line) => {
+      diff.createDiv({ cls: "forge-diff-removed", text: "- " + line });
+    });
+    proposal.replacement.split("\n").forEach((line) => {
+      diff.createDiv({ cls: "forge-diff-added", text: "+ " + line });
+    });
+    return wrap;
   }
 
   private appendInlineError(

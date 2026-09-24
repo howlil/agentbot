@@ -1,5 +1,5 @@
-import { AgentContext, EditProposal } from "../types";
-import { LearningContext } from "../context/context-types";
+import { AgentContext, AgentFailure, EditProposal } from "../types";
+import { TurnContextSnapshot } from "../context/context-types";
 import { LearningState } from "./learning-state";
 import {
   PracticeEvaluation,
@@ -19,10 +19,15 @@ export interface LearningRequest {
   explicitContext: AgentContext[];
 }
 
+export interface ProposedEdit {
+  id: string;
+  proposal: EditProposal;
+}
+
 export type LearningEvent =
   | {
       type: "context-ready";
-      context: LearningContext;
+      context: TurnContextSnapshot;
     }
   | {
       type: "response-delta";
@@ -38,7 +43,7 @@ export type LearningEvent =
     }
   | {
       type: "mutation-proposed";
-      proposal: EditProposal;
+      edit: ProposedEdit;
     }
   | {
       type: "learning-state-updated";
@@ -48,6 +53,9 @@ export type LearningEvent =
       type: "completed";
     }
   | {
-      type: "error";
-      message: string;
+      type: "failed";
+      failure: AgentFailure | { code: "timeout" | "busy"; message: string };
+    }
+  | {
+      type: "cancelled";
     };

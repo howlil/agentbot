@@ -27,7 +27,18 @@ function findOccurrences(content: string, needle: string): number[] {
 export class MutationService {
   constructor(private readonly app: App) {}
 
-  async apply(proposal: EditProposal): Promise<ApplyResult> {
+  async apply(
+    proposal: EditProposal,
+    allowedFiles: readonly string[],
+  ): Promise<ApplyResult> {
+    if (!allowedFiles.includes(proposal.file)) {
+      return {
+        ok: false,
+        reason: "unauthorized",
+        message: "This edit targets a note outside the approved turn context.",
+      };
+    }
+
     const file = this.app.vault.getFileByPath(proposal.file);
 
     if (!file || !(file instanceof TFile)) {

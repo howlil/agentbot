@@ -21,6 +21,10 @@ const copyAssetsPlugin = {
           fs.copyFileSync(asset, path.join("dist", asset));
         }
       }
+      const logo = path.join("public", "forge.png");
+      if (fs.existsSync(logo)) {
+        fs.copyFileSync(logo, path.join("dist", "forge.png"));
+      }
 
       const tailwind = path.resolve(
         "node_modules",
