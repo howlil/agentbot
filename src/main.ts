@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { FileSystemAdapter, Plugin } from "obsidian";
 import { AgyAdapter } from "./agent/AgyAdapter";
 import { ObsidianContext } from "./context/ObsidianContext";
 import { SessionStore } from "./session/SessionStore";
@@ -24,11 +24,18 @@ export default class AgyPlugin extends Plugin {
   private sc!: SessionController;
 
   async onload(): Promise<void> {
-    // Build core services
-    this.adapter = new AgyAdapter();
-    this.store   = new SessionStore();
-    this.ctx     = new ObsidianContext(this.app);
-    this.sc      = new SessionController(this, this.store, this.adapter, this.ctx);
+    const vaultAdapter = this.app.vault.adapter;
+    const vaultPath =
+      vaultAdapter instanceof FileSystemAdapter
+        ? vaultAdapter.getBasePath()
+        : undefined;
+
+    // Build core services. AGY runs with the vault as cwd so its workspace and
+    // Obsidian's active vault refer to the same project/files.
+    this.adapter = new AgyAdapter(vaultPath);
+    this.store = new SessionStore();
+    this.ctx = new ObsidianContext(this.app);
+    this.sc = new SessionController(this, this.store, this.adapter, this.ctx);
 
     // Init session (loads persisted data, fetches models)
     await this.sc.init();
@@ -36,7 +43,7 @@ export default class AgyPlugin extends Plugin {
     // Register sidebar view
     this.registerView(
       AGY_VIEW_TYPE,
-      (leaf) => new ChatView(leaf, this.sc, this.ctx)
+      (leaf) => new ChatView(leaf, this.sc, this.ctx),
     );
 
     // Ribbon icon
@@ -78,8 +85,10 @@ export default class AgyPlugin extends Plugin {
       workspace.revealLeaf(existing[0]);
       return;
     }
+
     const leaf = workspace.getRightLeaf(false);
     if (!leaf) return;
+
     await leaf.setViewState({ type: AGY_VIEW_TYPE, active: true });
     workspace.revealLeaf(leaf);
   }
