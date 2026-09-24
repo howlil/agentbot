@@ -1,27 +1,23 @@
 import { FileSystemAdapter, Plugin } from "obsidian";
 import { AgyAdapter } from "./agent/AgyAdapter";
-import { ObsidianContext } from "./context/ObsidianContext";
-import { SessionStore } from "./session/SessionStore";
-import { SessionController } from "./session/SessionController";
 import { ChatView, AGY_VIEW_TYPE } from "./chat/ChatView";
+import { ContextResolver } from "./context/ContextResolver";
+import { ObsidianContext } from "./context/ObsidianContext";
+import { PolicyLoader } from "./context/PolicyLoader";
+import { LearningController } from "./learning/LearningController";
+import { MutationService } from "./mutation/MutationService";
+import { SessionController } from "./session/SessionController";
+import { SessionStore } from "./session/SessionStore";
 
 /**
- * AgyPlugin — entry point.
+ * Composition root.
  *
- * Wires together:
- *   AgyAdapter ← SessionController ← ChatView
- *                     ↑
- *               SessionStore + ObsidianContext
- *
- * Lifecycle:
- *   onload  → register view + ribbon + commands, init SessionController
- *   onunload → detach leaves (kills any running process via ChatView.onClose)
+ * Business behavior belongs in LearningController/services; this file only
+ * constructs dependencies, registers Obsidian surfaces, and disposes runtime
+ * resources.
  */
 export default class AgyPlugin extends Plugin {
-  private adapter!: AgyAdapter;
-  private store!: SessionStore;
-  private ctx!: ObsidianContext;
-  private sc!: SessionController;
+  private learning!: LearningController;
 
   async onload(): Promise<void> {
     const vaultAdapter = this.app.vault.adapter;
@@ -30,40 +26,52 @@ export default class AgyPlugin extends Plugin {
         ? vaultAdapter.getBasePath()
         : undefined;
 
-    // Build core services. AGY runs with the vault as cwd so its workspace and
-    // Obsidian's active vault refer to the same project/files.
-    this.adapter = new AgyAdapter(vaultPath);
-    this.store = new SessionStore();
-    this.ctx = new ObsidianContext(this.app);
-    this.sc = new SessionController(this, this.store, this.adapter, this.ctx);
-
-    // Init session (loads persisted data, fetches models)
-    await this.sc.init();
-
-    // Register sidebar view
-    this.registerView(
-      AGY_VIEW_TYPE,
-      (leaf) => new ChatView(leaf, this.sc, this.ctx),
+    const adapter = new AgyAdapter(vaultPath);
+    const sessionStore = new SessionStore();
+    const sessions = new SessionController(
+      this,
+      sessionStore,
+      adapter,
     );
 
-    // Ribbon icon
-    this.addRibbonIcon("sparkles", "Open AGY", () => this.activateView());
+    await sessions.init();
 
-    // Command palette
+    const obsidianContext = new ObsidianContext(this.app);
+    const contexts = new ContextResolver(obsidianContext);
+    const policies = new PolicyLoader(this.app);
+    const mutations = new MutationService(this.app);
+
+    this.learning = new LearningController(
+      sessions,
+      contexts,
+      policies,
+      mutations,
+    );
+
+    this.registerView(
+      AGY_VIEW_TYPE,
+      (leaf) => new ChatView(leaf, this.learning),
+    );
+
+    this.addRibbonIcon(
+      "sparkles",
+      "Open Learning Agent",
+      () => this.activateView(),
+    );
+
     this.addCommand({
       id: "open-agy-sidebar",
-      name: "Open AGY sidebar",
+      name: "Open Learning Agent sidebar",
       callback: () => this.activateView(),
     });
 
-    // Keyboard shortcut: Ctrl/Cmd+L
     this.addCommand({
       id: "focus-agy-composer",
-      name: "Focus AGY composer",
+      name: "Focus Learning Agent composer",
       hotkeys: [{ modifiers: ["Mod"], key: "l" }],
       callback: async () => {
         await this.activateView();
-        // Give the leaf time to open, then focus the input
+
         setTimeout(() => {
           const leaves = this.app.workspace.getLeavesOfType(AGY_VIEW_TYPE);
           const view = leaves[0]?.view as ChatView | undefined;
@@ -74,13 +82,14 @@ export default class AgyPlugin extends Plugin {
   }
 
   async onunload(): Promise<void> {
-    // Kills any running AGY process via ChatView.onClose → sc.destroy()
     this.app.workspace.detachLeavesOfType(AGY_VIEW_TYPE);
+    this.learning?.dispose();
   }
 
   private async activateView(): Promise<void> {
     const { workspace } = this.app;
     const existing = workspace.getLeavesOfType(AGY_VIEW_TYPE);
+
     if (existing.length > 0) {
       workspace.revealLeaf(existing[0]);
       return;
@@ -89,7 +98,10 @@ export default class AgyPlugin extends Plugin {
     const leaf = workspace.getRightLeaf(false);
     if (!leaf) return;
 
-    await leaf.setViewState({ type: AGY_VIEW_TYPE, active: true });
+    await leaf.setViewState({
+      type: AGY_VIEW_TYPE,
+      active: true,
+    });
     workspace.revealLeaf(leaf);
   }
 }
