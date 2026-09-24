@@ -52,7 +52,7 @@ test("practice evaluation preserves the exact question and answer", () => {
     buildPracticeEvaluationInstruction({
       question: "Why does order matter?",
       concept: "indexes",
-      answer: "A -> B\n{"reason":"ordering"}",
+      answer: 'A -> B\n{"reason":"ordering"}',
     });
 
   assert.ok(
