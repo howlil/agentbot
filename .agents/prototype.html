@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AGY Plugin — Interaction Prototype</title>
+<title>Forge Plugin — Interaction Prototype</title>
 <style>
   /* ─── Reset & Base ─────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -191,7 +191,7 @@
     max-width: 85%;
     line-height: 1.5;
   }
-  .bubble-agy {
+  .bubble-agent {
     align-self: flex-start;
     background: #1f1f30;
     color: #b8b8d8;
@@ -202,7 +202,7 @@
     line-height: 1.5;
     border: 1px solid #2a2a3e;
   }
-  .bubble-agy.streaming::after {
+  .bubble-agent.streaming::after {
     content: "▋";
     animation: blink 0.8s step-end infinite;
     color: #7c5cbf;
@@ -464,7 +464,7 @@
   <!-- Sidebar -->
   <div class="sidebar">
     <div class="sidebar-header">
-      <span class="sidebar-title">✦ AGY</span>
+      <span class="sidebar-title">✦ Forge</span>
       <span class="sidebar-icon">✕</span>
     </div>
 
@@ -474,8 +474,8 @@
       <!-- EMPTY state -->
       <div class="empty-slate" id="state-empty">
         <span class="empty-icon">✦</span>
-        <span class="empty-label">Ask AGY about this note</span>
-        <span class="empty-hint">Selection detected — AGY will read it</span>
+        <span class="empty-label">Ask Forge about this note</span>
+        <span class="empty-hint">Selection detected — Forge will read it</span>
       </div>
 
       <!-- RUNNING state content -->
@@ -485,13 +485,13 @@
           <div class="spinner"></div>
           Reading selection…
         </div>
-        <div class="bubble-agy streaming" id="stream-text">Analyzing the selected paragraph</div>
+        <div class="bubble-agent streaming" id="stream-text">Analyzing the selected paragraph</div>
       </div>
 
       <!-- PROPOSAL state content -->
       <div id="state-proposal" class="hidden">
         <div class="bubble-user">perbaiki bagian ini</div>
-        <div class="bubble-agy">
+        <div class="bubble-agent">
           Kalimat saat ini menggambarkan model <em>synchronous</em>, bukan event-driven.
           Saya usulkan perubahan berikut:
         </div>
@@ -517,7 +517,7 @@
       <!-- APPLIED state content -->
       <div id="state-applied" class="hidden">
         <div class="bubble-user">perbaiki bagian ini</div>
-        <div class="bubble-agy">
+        <div class="bubble-agent">
           Kalimat saat ini menggambarkan model <em>synchronous</em>, bukan event-driven.
           Saya usulkan perubahan berikut:
         </div>
@@ -541,9 +541,9 @@
       <!-- ERROR state -->
       <div class="error-slate hidden" id="state-error">
         <span class="error-icon">⚠</span>
-        <span class="error-title">AGY unavailable</span>
-        <span class="error-body">AGY CLI was not found.<br>Make sure <code>agy</code> is installed and in PATH.</span>
-        <button class="btn-configure">Configure AGY →</button>
+        <span class="error-title">Agent unavailable</span>
+        <span class="error-body">Forge could not reach its agent runtime.</span>
+        <button class="btn-configure">Configure runtime →</button>
       </div>
 
     </div><!-- /thread -->
@@ -558,7 +558,7 @@
         <textarea
           class="composer-textarea"
           id="composer-input"
-          placeholder="Ask AGY…"
+          placeholder="Ask Forge…"
           rows="1"
           oninput="handleInput(this)"
           onkeydown="handleKey(event)"
@@ -594,7 +594,7 @@ const STATES = {
     sendDisabled: true,
     editorSelected: true,
     editorApplied: false,
-    annotation: '<strong>RUNNING</strong> — Textarea disabled. AGY reading selection. Tokens stream in.<br><span class="action-hint">→ Wait a moment… (click ③ PROPOSAL to jump ahead)</span>',
+    annotation: '<strong>RUNNING</strong> — Textarea disabled. Forge is reading selection. Tokens stream in.<br><span class="action-hint">→ Wait a moment… (click ③ PROPOSAL to jump ahead)</span>',
   },
   proposal: {
     show: ['state-proposal'],
@@ -621,7 +621,7 @@ const STATES = {
     sendDisabled: true,
     editorSelected: false,
     editorApplied: false,
-    annotation: '<strong>ERROR</strong> — AGY CLI not found. All inputs disabled. Only [Configure] is actionable.<br><span class="action-hint">→ User clicks Configure → opens Obsidian plugin settings</span>',
+    annotation: '<strong>ERROR</strong> — Agent runtime unavailable. All inputs disabled. Only [Configure] is actionable.<br><span class="action-hint">→ User clicks Configure → opens Obsidian plugin settings</span>',
   },
 };
 

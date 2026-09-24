@@ -11,14 +11,14 @@ export interface AgentInput {
   context: AgentContext[];
 }
 
-// ── AGY transport ───────────────────────────────────────────────────────────
+// ── Agent transport ─────────────────────────────────────────────────────────
 
-export interface AgyTurnInput {
+export interface AgentTurnInput {
   role: "user";
   content: string;
 }
 
-export type AgyStreamEvent =
+export type AgentStreamEvent =
   | { type: "text"; content: string }
   | { type: "done"; conversationId?: string }
   | { type: "error"; error: string };
@@ -63,7 +63,7 @@ export interface ChatSession {
   updatedAt: number;
 }
 
-export interface AgyModel {
+export interface AgentModel {
   id: string;
   name: string;
 }
@@ -76,9 +76,9 @@ export interface AgentAdapter {
   send(
     input: AgentInput,
     opts: SendOptions,
-  ): AsyncIterable<AgyStreamEvent>;
+  ): AsyncIterable<AgentStreamEvent>;
 
-  listModels(): Promise<AgyModel[]>;
+  listModels(): Promise<AgentModel[]>;
 
   abort(): void;
 }

@@ -1,4 +1,4 @@
-# Product — AGY Obsidian Plugin
+# Product — Forge Obsidian Plugin
 
 ## Problem
 
@@ -17,12 +17,12 @@
 ```
 Note open in editor
   ↓ user selects paragraph (optional)
-  ↓ opens AGY sidebar (Ctrl+L or icon)
-EMPTY state → "Ask AGY about this note"
+  ↓ opens Forge sidebar (Ctrl+L or icon)
+EMPTY state → "Ask Forge about this note"
   ↓ user types prompt, sends
-THINKING state → "AGY working… Reading <note name>"
-  ↓ AGY streams response
-ANSWER state → streamed markdown in conversation
+THINKING state → "Forge working… Reading <note name>"
+  ↓ agent runtime streams response
+  ANSWER state → streamed markdown in conversation
   ↓ job complete
 ```
 
@@ -32,7 +32,7 @@ ANSWER state → streamed markdown in conversation
 ANSWER or EMPTY state
   ↓ user sends prompt requesting a change
 THINKING state
-  ↓ AGY proposes patch
+  ↓ agent runtime proposes patch
 DIFF state → diff preview rendered in conversation bubble
               - old line
               + new line
@@ -60,9 +60,9 @@ User types @<name>
 ### Failure state
 
 ```
-AGY CLI not found or unreachable
-  → sidebar shows: "AGY unavailable — AGY CLI was not found"
-  → [Configure AGY] button
+Agent runtime not found or unreachable
+  → sidebar shows: "Agent unavailable — check Forge runtime settings"
+  → [Configure runtime] button
   → all other sidebar elements disabled
 ```
 
@@ -72,12 +72,12 @@ AGY CLI not found or unreachable
 
 | State     | What the user sees                                             |
 |-----------|----------------------------------------------------------------|
-| EMPTY     | Placeholder "Ask AGY about this note", context chip visible   |
+| EMPTY     | Placeholder "Ask Forge about this note", context chip visible |
 | THINKING  | Spinner + "Reading \<note\>" status line, input disabled        |
-| ANSWER    | Streamed markdown response in conversation                     |
+| ANSWER    | Streaming preview settles into rendered Markdown response     |
 | DIFF      | Diff block inside conversation bubble + Reject / Apply buttons |
 | APPLIED   | "✓ Updated \<note\>" confirmation, note already changed        |
-| ERROR     | "AGY unavailable" + Configure button                          |
+| ERROR     | "Agent unavailable" + Configure runtime button                |
 
 State transitions:
 
@@ -99,8 +99,8 @@ EMPTY ──send──→ THINKING ──stream──→ ANSWER
 
 - **No magic context.** Every file the AI can read must be visible as a chip in the composer. No background vault indexing, embeddings, or implicit file reading.
 - **Edits are atomic.** Apply must use a single Obsidian editor transaction so native Undo works without special handling.
-- **Sidebar only.** AGY lives in the Obsidian right sidebar. No separate dashboard, history page, or workspace page.
-- **Local CLI dependency.** AGY CLI must be installed and accessible. The plugin does not bundle or proxy the AI itself.
+- **Sidebar only.** Forge lives in the Obsidian right sidebar. No separate dashboard, history page, or workspace page.
+- **Runtime boundary.** Forge depends on a configured agent runtime behind `AgentAdapter`. The plugin does not expose provider-specific protocol or bundle the model runtime.
 - **Obsidian platform.** All UI must be a standard Obsidian ItemView. No external browser window or full-page takeover.
 - **Minimal UI surface.** No toolbar heavy with mode switches, token counters, agent status panels, or settings embedded in the sidebar chat.
 
@@ -110,7 +110,8 @@ EMPTY ──send──→ THINKING ──stream──→ ANSWER
 
 **In v0:**
 - Right sidebar chat panel
-- Streaming AGY response (ANSWER state)
+- Streaming agent response (ANSWER state)
+- Rendered Markdown in response bubbles (headings, lists, links, code)
 - Model selector (single dropdown in header)
 - `@current-note` context (auto, shown as chip)
 - `@selection` context (auto when text selected, shown as chip)
@@ -122,7 +123,7 @@ EMPTY ──send──→ THINKING ──stream──→ ANSWER
 **Out of v0 (explicitly deferred):**
 - Agent mode (multi-step, multi-file, terminal)
 - Background vault indexing / RAG / embeddings
-- Multi-agent or Codex / Claude CLI support
+- Multiple providers or runtime management UI
 - Chat history browser or branching
 - Prompt marketplace
 - MCP manager UI
@@ -135,7 +136,7 @@ EMPTY ──send──→ THINKING ──stream──→ ANSWER
 
 ```
 Given: note open in editor, paragraph selected
-When:  user opens AGY sidebar and types "perbaiki penjelasan ini"
+When:  user opens Forge sidebar and types "perbaiki penjelasan ini"
 Then:  THINKING state shows "Reading <selection>"
        DIFF state renders before/after lines
        clicking Apply changes the note text immediately
@@ -144,10 +145,10 @@ Then:  THINKING state shows "Reading <selection>"
 ```
 
 ```
-Given: AGY CLI is not installed
-When:  user opens the AGY sidebar
-Then:  ERROR state is shown with "AGY CLI was not found"
-       [Configure AGY] is the only actionable element
+Given: the configured agent runtime is unavailable
+When:  user opens the Forge sidebar
+Then:  ERROR state is shown with "Agent unavailable"
+       [Configure runtime] is the only actionable element
        no crash, no blank panel
 ```
 
@@ -155,13 +156,20 @@ Then:  ERROR state is shown with "AGY CLI was not found"
 Given: no text selected, note open
 When:  user sends any message
 Then:  context chip shows "@current-note"
-       AGY response references the current note, not vault-wide content
+       Agent response references the current note, not vault-wide content
+```
+
+```
+Given: the agent runtime returns Markdown with a heading, list, or fenced code block
+When:  the response finishes streaming
+Then:  Forge renders the Markdown structure in the response bubble
+       and does not show the Markdown markers as raw text
 ```
 
 ---
 
 ## Assumptions
 
-- AGY CLI is invocable from a Node.js child process spawned by the plugin.
-- Diff format from AGY is line-level (unified diff or equivalent) and can be rendered without a full LSP.
+- A configured agent runtime can be invoked through `AgentAdapter`.
+- Diff format from the runtime is line-level (unified diff or equivalent) and can be rendered without a full LSP.
 - Obsidian's editor API (CodeMirror 6) supports atomic multi-line replacement via a single transaction.

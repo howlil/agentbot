@@ -6,8 +6,8 @@ import {
   AgentAdapter,
   AgentInput,
   AgentContext,
-  AgyStreamEvent,
-  AgyModel,
+  AgentStreamEvent,
+  AgentModel,
   SendOptions,
 } from "../types";
 
@@ -30,7 +30,7 @@ function escapeAttribute(value: string): string {
 //   {"event":"result","result":{"status":"SUCCESS|ERROR|...","response":"...","error":"..."}}
 //
 // Each send() starts one print-mode process. Conversation continuity is restored
-// with --conversation <id>. The UI only sees normalized AgyStreamEvent values.
+// with --conversation <id>. The UI only sees normalized AgentStreamEvent values.
 
 export class AgyAdapter implements AgentAdapter {
   private proc: ChildProcess | null = null;
@@ -91,7 +91,7 @@ export class AgyAdapter implements AgentAdapter {
 
   // ── send ──────────────────────────────────────────────────────────────────
 
-  async *send(input: AgentInput, opts: SendOptions): AsyncIterable<AgyStreamEvent> {
+  async *send(input: AgentInput, opts: SendOptions): AsyncIterable<AgentStreamEvent> {
     const bin = await this.ping();
     const fullPrompt = this.buildFullPrompt(input);
     const args = this.buildArgs(fullPrompt, opts);
@@ -153,7 +153,7 @@ export class AgyAdapter implements AgentAdapter {
 
   // ── stdout reader ─────────────────────────────────────────────────────────
 
-  private async *readEvents(proc: ChildProcess): AsyncIterable<AgyStreamEvent> {
+  private async *readEvents(proc: ChildProcess): AsyncIterable<AgentStreamEvent> {
     let buffer = "";
     let stderr = "";
     let exitCode: number | null = null;
@@ -189,7 +189,7 @@ export class AgyAdapter implements AgentAdapter {
       const msg = chunk.toString();
       stderr += msg;
       const trimmed = msg.trim();
-      if (trimmed) console.warn("[AgyAdapter]", trimmed);
+      if (trimmed) console.warn("[Forge agent provider]", trimmed);
     });
 
     proc.on("error", (err) => {
@@ -251,7 +251,7 @@ export class AgyAdapter implements AgentAdapter {
   /**
    * Parse one AGY NDJSON line into a normalized event.
    */
-  private parseLine(line: string): AgyStreamEvent | null {
+  private parseLine(line: string): AgentStreamEvent | null {
     let obj: Record<string, unknown>;
 
     try {
@@ -327,7 +327,7 @@ export class AgyAdapter implements AgentAdapter {
 
   // ── listModels ────────────────────────────────────────────────────────────
 
-  async listModels(): Promise<AgyModel[]> {
+  async listModels(): Promise<AgentModel[]> {
     const bin = await this.ping();
 
     return new Promise((resolve, reject) => {
@@ -351,7 +351,7 @@ export class AgyAdapter implements AgentAdapter {
           return;
         }
 
-        const models: AgyModel[] = out
+        const models: AgentModel[] = out
           .split(/\r?\n/)
           .map((line) => line.trim())
           .filter(Boolean)
@@ -365,7 +365,7 @@ export class AgyAdapter implements AgentAdapter {
               name: columns.slice(1).join(" ").trim(),
             };
           })
-          .filter((model): model is AgyModel => model !== null);
+          .filter((model): model is AgentModel => model !== null);
 
         resolve(models);
       });

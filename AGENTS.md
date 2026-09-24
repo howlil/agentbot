@@ -1,930 +1,263 @@
-# AGENTS.md
+# Forge Development Workflow
 
-## Canonical Product Direction — Learning OS
+This repository builds Forge, an Obsidian plugin for a Learning OS. Keep
+changes small, behavior-first, and releasable. Forge is agent-runtime agnostic;
+the current provider integration is an implementation detail behind
+`AgentAdapter`.
 
-This section supersedes older chat-only product framing elsewhere in this file.
+The durable product contract lives in `.agents/product.md`. The interface
+states and interaction contract live in `.agents/interaction-spec.md`. This
+file defines how to develop and verify the product.
 
-The product is an **agent harness for a Learning OS inside Obsidian**, not merely
-an AI chat sidebar.
+## 1. Working principles
 
-Canonical system graph:
+Optimize for:
 
 ```text
-learning goal
-  + current knowledge
-  + resolved note/selection context
-  + interaction history
-        ↓
-LearningController
-        ↓
-learning action
-├─ ask
-├─ explain
-├─ practice
-├─ review
-└─ edit
-        ↓
-understanding / durable learning state / approved vault changes
+correct behavior
++ clear ownership
++ explicit boundaries
++ maintainable structure
++ fast feedback
++ small releasable changes
 ```
 
-Current dependency direction:
+Prefer the smallest correct change. Do not optimize for abstraction count,
+coverage percentage, ceremony, or speculative scale.
+
+Preserve existing dirty work. Inspect the worktree before editing, do not
+overwrite unrelated files, and never reset, clean, or force-push without an
+explicit request.
+
+## 2. Repository map
+
+| Area | Responsibility |
+| --- | --- |
+| `src/main.ts` | Composition root, Obsidian registration, lifecycle |
+| `src/chat/ChatView.ts` | Rendering and capturing user intent only |
+| `src/learning/LearningController.ts` | Learning orchestration and normalized events |
+| `src/context/` | Current note, selection, and policy context |
+| `src/mutation/MutationService.ts` | Validated, user-approved Markdown mutations |
+| `src/persistence/VaultLearningStore.ts` | Durable evidence-backed learning progress |
+| `src/session/` | Conversation and model persistence |
+| `src/agent/AgyAdapter.ts` | Current provider process/protocol adapter behind `AgentAdapter` |
+| `styles.css` | Tailwind v4 CSS entry with theme-aware Forge styles |
+| `DESIGN.md` | Forge interface graph, semantic tokens, and design acceptance gates |
+| `dist/` | Generated build artifacts; never edit directly |
+| `scripts/deploy.mjs` | Copies `dist/` into an Obsidian vault |
+
+## 3. Ownership boundaries
+
+The dependency direction is:
 
 ```text
 ChatView
-   ↓
+  ↓
 LearningController
-   ├─ ContextResolver
-   ├─ PolicyLoader
-   ├─ VaultLearningStore
-   ├─ MutationService
-   └─ SessionController
-          ↓
-       AgentAdapter
-          ↓
-       AgyAdapter
-          ↓
-        AGY CLI
+  ├─ ContextResolver
+  ├─ PolicyLoader
+  ├─ VaultLearningStore
+  ├─ MutationService
+  └─ SessionController
+         ↓
+      AgentAdapter
+         ↓
+      provider adapter
+         ↓
+      configured agent runtime
 ```
 
-Ownership rules:
-
-- `ChatView` renders state and captures user intent. It must not parse AGY
-  protocol, resolve learning context, evaluate practice answers, mutate notes,
-  or persist learning progress.
-- `LearningController` owns learning orchestration and maps runtime output into
+- `ChatView` renders state and captures intent. It must not parse provider protocol,
+  resolve context, evaluate practice answers, mutate notes, or persist progress.
+- `LearningController` owns learning actions, state transitions, and normalized
   learning events.
-- `ContextResolver` is the single source of truth for both visible context
-  chips and context sent to the agent.
+- `ContextResolver` is the single source of truth for visible context and
+  context sent to the agent.
 - `PolicyLoader` loads vault-root `AGENTS.md` as Learning OS policy.
-- `VaultLearningStore` owns durable evidence-backed progress in
-  `00-learning-os/progress.json`.
-- `MutationService` is the only normal path for user-approved Markdown
-  mutations. It must reject stale or ambiguous replacements.
-- `SessionController` owns conversation/model persistence only. Do not add
-  learning, context, or mutation responsibilities back into it.
-- `AgyAdapter` owns AGY process/protocol behavior. Upper layers must not know
-  AGY-specific events such as `step_update`.
+- `VaultLearningStore` persists only meaningful, evidence-backed progress.
+- `MutationService` is the normal path for approved Markdown changes and must
+  reject stale or ambiguous replacements.
+- `SessionController` owns conversation/model persistence only.
+- The provider adapter owns child-process and provider protocol behavior. Upper
+  layers must depend only on `AgentAdapter` and normalized agent events.
 
-Learning-state invariant:
+Do not introduce RAG, embeddings, background autonomy, multi-agent workflows,
+or provider proliferation before the Learning OS loop is reliable.
 
-```text
-interaction
-   ↓
-meaningful evidence?
-├─ no  → do not update progress
-└─ yes → evidence → gap/state transition → persist
-```
+## 4. Standard development loop
 
-A normal question is not proof of mastery. Practice evaluation can create
-evidence; one correct answer may mark an existing gap as improving, not
-automatically mastered/resolved.
-
-Practice invariant:
+Use this loop for every non-trivial change:
 
 ```text
-generate question
-   ↓
-wait for user answer
-   ↓
-evaluate
-   ↓
-persist evidence
-   ↓
-next question or complete
+inspect → classify → define one slice → implement → verify → inspect diff
 ```
 
-The plugin owns the practice state transition. The model owns question
-generation and evaluation.
+### Inspect
 
-Do not add RAG, embeddings, multi-agent orchestration, background autonomy, or
-provider proliferation until the Learning OS loop above is working reliably.
+Start with:
 
----
+```powershell
+git status --short
+git diff --stat
+git diff
+```
 
+Read the relevant source, nearby types, product contract, and existing tests
+before editing. Check the current plugin identity and build path when a change
+touches packaging or deployment.
 
-## Purpose
+### Classify
 
-Build an Obsidian desktop plugin that provides a native AI chat sidebar backed by **AGY CLI**.
+- **Mechanical** — formatting, renames, generated output: make the smallest
+  direct change and run the existing gate.
+- **Local behavior** — validation, transformation, state rule, or bug: add a
+  failing behavioral proof when practical, then implement the minimum fix.
+- **Boundary/state** — persistence, process lifecycle, editor mutation, or
+  external integration: model the contract and verify at the real boundary.
+- **High risk** — authorization, destructive data, concurrency, migrations, or
+  uncertain external effects: state the invariant and use deeper verification.
 
-The product is not a terminal embedded in Obsidian. The product is:
+### Define one slice
 
-> A native Obsidian AI companion that can understand the current note/selection, chat through AGY, propose Markdown edits, and apply approved changes safely.
+Keep one change independently understandable and verifiable. Do not combine
+feature work with unrelated cleanup, dependency upgrades, or architecture
+refactors. If a refactor is required, make it behavior-preserving and separate
+from the feature when possible.
 
-The implementation must stay **agent-agnostic at the UI/application boundary** so AGY can later be replaced or complemented by Codex, Claude CLI, or another agent runtime without rewriting the product.
+### Implement
 
----
+Keep the public surface small and preserve dependency direction. Remove a
+superseded path instead of leaving old and new implementations active without
+a compatibility reason.
 
-## Product Goal
+For UI work, preserve native Obsidian behavior, visible context, compact
+density, keyboard access, and clear loading/error/empty states. Do not add
+dashboard-like surfaces or decorative complexity.
 
-The primary user flow is:
+Read `DESIGN.md` before changing UI. Use its interface graph, semantic tokens,
+radius/spacing scale, and acceptance test as the default design contract. Keep
+the existing purple `--interactive-accent`; do not introduce hard-coded visual
+tokens, decorative gradients, or unrelated component variants. If a change
+adds a consequential interaction or AI state, update the graph and verify the
+new state at the same boundary.
+
+## 5. Verification gates
+
+Run gates sequentially to avoid pnpm workspace-state races:
+
+```powershell
+pnpm typecheck
+pnpm lint
+pnpm build
+git diff --check
+```
+
+`pnpm build` writes `dist/main.js` and compiles the root `styles.css` entry with
+the local Tailwind v4 CLI into `dist/styles.css`. The root `styles.css` is the
+source asset; `dist/` is the artifact directory. Do not edit generated
+artifacts directly.
+
+`pnpm lint` is required when its ESLint configuration is available. If the
+repository tooling prevents it from running, report the exact baseline error
+instead of treating lint as green.
+
+This repository currently has no test script. Add focused behavioral tests when
+a suitable harness exists; do not create tests only to increase coverage.
+
+Use risk-proportional verification:
+
+| Changed area | Minimum faithful proof |
+| --- | --- |
+| Pure learning rule or parser | Focused unit/regression test |
+| Context resolution | Selection/current-note behavior proof |
+| Agent stream or process lifecycle | Adapter/process integration proof |
+| Markdown mutation | Stale/ambiguous replacement and editor undo proof |
+| Learning progress | Evidence, gap transition, and persistence proof |
+| UI state or styling | Typecheck/build plus affected flow inspection |
+| Packaging or deployment | Generated artifact and target-path inspection |
+
+Source, typecheck, and build proof do not prove live Obsidian rendering or
+deployment. State those gaps honestly.
+
+## 6. Plugin identity and delivery
+
+The current plugin identity is:
 
 ```text
-open note
-  ↓
-select text (optional)
-  ↓
-open AI sidebar
-  ↓
-ask a question or request an edit
-  ↓
-agent reads explicit context
-  ↓
-response streams into sidebar
-  ↓
-if edit requested: show diff
-  ↓
-user chooses Apply / Reject
-  ↓
-Markdown changes through Obsidian APIs
-  ↓
-Ctrl/Cmd+Z can undo
+package name: forge-obsidian
+view type: forge-sidebar
+artifact: dist/main.js
+styles: dist/styles.css
+deployment target: .obsidian/plugins/forge-obsidian
 ```
 
-Optimize everything around making this flow reliable, fast, and predictable.
+Use:
 
----
+```powershell
+pnpm build
+pnpm deploy "C:\Path\To\Vault"
+```
 
-## Product Principles
+Deployment copies the contents of `dist/` and may update the target vault's
+`community-plugins.json`. Do not deploy or modify a user's vault unless the
+user explicitly asks for it. A plugin ID change creates a new Obsidian plugin
+identity; do not silently delete the previous plugin directory or settings.
 
-1. **Obsidian remains the workspace**
-   - Main editor = notes.
-   - Right sidebar = AI interaction.
-   - Do not create a separate AI dashboard unless a real need appears.
+Forge is the only user-facing product name. Provider names may appear only in
+the adapter implementation, provider-specific diagnostics, and integration
+notes; never in UI labels, product copy, or normalized contracts.
 
-2. **Context must be visible**
-   - The user should know what the agent can see.
-   - Prefer explicit context chips such as:
-     - `@selection`
-     - `@current-note`
-     - `@Some Note.md`
-     - later: `@folder`
+## 7. High-risk invariants
 
-3. **AI proposes; the plugin controls mutations**
-   - AGY must not directly overwrite Markdown through uncontrolled shell/file operations for normal edit flows.
-   - The application layer validates proposed edits before applying them.
-
-4. **Safe by default**
-   - Read/chat operations should not require dangerous permissions.
-   - Do not default to unrestricted AGY execution.
-   - User-approved edit operations go through Obsidian APIs.
-
-5. **No speculative architecture**
-   - Build only abstractions required by the current product.
-   - Keep boundaries clear but small.
-   - Prefer concrete modules over generic frameworks.
-
-6. **Agent-runtime agnostic**
-   - UI code must not depend directly on AGY-specific events or commands.
-   - AGY-specific behavior belongs inside `AgyAdapter`.
-
----
-
-# Target v0.1
-
-v0.1 is complete when the user can:
+### Learning state
 
 ```text
-selection/current note
-        ↓
-chat with AGY
-        ↓
-receive streamed response
-        ↓
-receive edit proposal
-        ↓
-review diff
-        ↓
-Apply / Reject
-        ↓
-Undo applied edit
+interaction → meaningful evidence? → evidence → gap/state transition → persist
 ```
 
-Also required:
+A normal question is not proof of mastery. Practice evaluation may create
+evidence, but one correct answer must not automatically mark an existing gap as
+mastered.
 
-- AGY executable detection.
-- Model selection.
-- Session persistence.
-- Graceful error states.
-- Correct process cleanup.
-
-Do not expand scope until this works end-to-end.
-
----
-
-# Non-Goals for v0.1
-
-Do not implement these unless explicitly requested:
-
-- RAG / embeddings.
-- Automatic vault indexing.
-- Multi-agent orchestration.
-- MCP management UI.
-- Agent marketplace.
-- Prompt marketplace.
-- Chat branching.
-- AI dashboard.
-- Background autonomous agents.
-- Terminal emulator.
-- Complex file history/versioning.
-- Custom diff engine if a simple implementation works.
-- Provider abstraction beyond what is necessary for `AgentAdapter`.
-
----
-
-# Architecture
-
-Use this dependency direction:
+### Practice
 
 ```text
-Obsidian UI
-    ↓
-Application / Controllers
-    ↓
-Domain contracts
-    ↓
-Infrastructure adapters
-    ├── AgyAdapter
-    └── Obsidian APIs
+generate question → wait for answer → evaluate → persist evidence
+→ next question or complete
 ```
 
-Concrete shape:
+The plugin owns the practice transition. The model generates questions and
+evaluations.
+
+### Editing
 
 ```text
-ChatView
-   ↓
-ChatController
-   ├── ContextService
-   ├── SessionStore
-   ├── EditService
-   └── AgentAdapter
-          ↓
-       AgyAdapter
-          ↓
-        AGY CLI
+proposal → re-read current document → exact unique match → user approval
+→ one editor transaction
 ```
 
-Rules:
-
-- UI must not spawn processes directly.
-- UI must not parse AGY stream JSON directly.
-- `AgyAdapter` must not manipulate Obsidian editor state.
-- `EditService` owns applying validated edits.
-- `ContextService` owns resolving Obsidian context.
-- `SessionStore` owns persisted chat/session metadata.
-
----
-
-# Suggested File Structure
-
-Keep the repository structure small.
-
-```text
-src/
-├── main.ts
-│
-├── chat/
-│   ├── ChatView.ts
-│   ├── ChatController.ts
-│   ├── ChatComposer.ts
-│   └── MessageRenderer.ts
-│
-├── agent/
-│   ├── AgentAdapter.ts
-│   ├── AgentEvents.ts
-│   └── agy/
-│       ├── AgyAdapter.ts
-│       └── AgyProtocol.ts
-│
-├── context/
-│   ├── ContextService.ts
-│   └── context-types.ts
-│
-├── editing/
-│   ├── EditService.ts
-│   ├── EditProposal.ts
-│   └── DiffView.ts
-│
-├── sessions/
-│   ├── SessionStore.ts
-│   └── session-types.ts
-│
-└── settings/
-    └── SettingsTab.ts
-```
-
-Do not create more layers unless the code has a concrete responsibility that cannot fit cleanly here.
-
----
-
-# Core Contracts
-
-## Agent Adapter
-
-All agent runtimes must eventually fit this boundary.
-
-```ts
-export interface AgentAdapter {
-  start(config: AgentConfig): Promise<void>;
-
-  send(input: AgentInput): AsyncIterable<AgentEvent>;
-
-  stop(): Promise<void>;
-
-  listModels?(): Promise<AgentModel[]>;
-
-  resume?(conversationId: string): Promise<void>;
-}
-```
-
-Example input:
-
-```ts
-export type AgentInput = {
-  prompt: string;
-  context: AgentContext[];
-};
-```
-
-Normalized events:
-
-```ts
-export type AgentEvent =
-  | { type: "started" }
-  | { type: "text-delta"; text: string }
-  | { type: "tool"; name: string; detail?: string }
-  | { type: "edit-proposal"; proposal: EditProposal }
-  | { type: "completed"; conversationId?: string }
-  | { type: "error"; message: string };
-```
-
-AGY-specific JSON must be converted into these events inside `AgyAdapter`.
-
----
-
-# AGY Integration
-
-Use AGY as a persistent child process when practical.
-
-Expected mode:
-
-```text
-agy
-  --input-format stream-json
-  --output-format stream-json
-```
-
-Do not render raw AGY protocol data in the UI.
-
-Normalize:
-
-```text
-AGY stream event
-      ↓
-AgyAdapter
-      ↓
-AgentEvent
-      ↓
-ChatController
-      ↓
-ChatView
-```
-
-Process lifecycle requirements:
-
-- Spawn only when needed.
-- Detect missing executable.
-- Capture stderr.
-- Handle malformed JSON without crashing Obsidian.
-- Support cancellation.
-- Stop child processes during plugin unload/reload.
-- Never leave orphan/zombie AGY processes.
-
-Do not use shell interpolation for user-controlled content.
-
-Prefer argument arrays with `spawn()` over shell strings.
-
----
-
-# Context Rules
-
-Context must be deterministic.
-
-Default behavior:
-
-```text
-if selection exists
-    → use @selection
-
-else
-    → use @current-note
-```
-
-Explicit user context may add notes later.
-
-Minimum domain type:
-
-```ts
-export type AgentContext =
-  | {
-      type: "selection";
-      file: string;
-      content: string;
-    }
-  | {
-      type: "note";
-      file: string;
-      content: string;
-    };
-```
-
-Rules:
-
-- Include source filename.
-- Context visible in UI.
-- User can remove context.
-- Resolve context at send time.
-- Do not reuse stale selection from an earlier note.
-- Do not automatically dump the entire vault into prompts.
-- AGY may operate with the vault directory as working directory when appropriate.
-
----
-
-# Editing Model
-
-Normal edit flow:
-
-```text
-user instruction
-      ↓
-agent reasoning
-      ↓
-EditProposal
-      ↓
-validate current document
-      ↓
-show diff
-      ↓
-Apply / Reject
-```
-
-Minimum proposal:
-
-```ts
-export type EditProposal = {
-  file: string;
-  original: string;
-  replacement: string;
-  reason?: string;
-};
-```
-
-The proposal is not permission to write.
-
-Before Apply:
-
-1. Confirm the target file still exists.
-2. Read current content.
-3. Confirm `original` still matches.
-4. Detect stale proposals.
-5. Only then apply.
-
-If the document changed and the proposal is no longer safe:
-
-```text
-proposal stale
-   ↓
-do not apply
-   ↓
-ask user to regenerate
-```
-
-Do not silently rebase an ambiguous edit.
-
----
-
-# Applying Markdown Changes
-
-For an active/open note, prefer Obsidian editor APIs so:
-
-- cursor behavior remains correct;
-- editor state remains synchronized;
-- Undo works naturally.
-
-Desired invariant:
-
-```text
-one Apply
-   =
-one logical editor history operation
-```
-
-For non-active files, use Obsidian Vault APIs rather than arbitrary filesystem writes when possible.
-
-Never overwrite an entire note when a precise edit is sufficient.
-
----
-
-# Session Model
-
-Minimum session:
-
-```ts
-export type ChatSession = {
-  id: string;
-  model?: string;
-  conversationId?: string;
-  messages: ChatMessage[];
-  createdAt: number;
-  updatedAt: number;
-};
-```
-
-Required behavior:
-
-- New Chat creates a clean session.
-- Sessions do not leak context between each other.
-- Persist enough state to restore the latest conversation after Obsidian restarts.
-- Store AGY `conversationId` when available.
-- If resume fails, show a clear recoverable state rather than crashing.
-
-Avoid building a complex chat-history product in v0.1.
-
----
-
-# UI
-
-The AI interface lives in an Obsidian right-sidebar `ItemView`.
-
-Conceptual UI:
-
-```text
-┌─────────────────────────────┐
-│ AGY             Model ▾   + │
-├─────────────────────────────┤
-│                             │
-│ conversation                │
-│                             │
-│ proposed edit               │
-│ - old                       │
-│ + new                       │
-│                             │
-│ [Reject]          [Apply]   │
-│                             │
-├─────────────────────────────┤
-│ @selection @current-note    │
-│                             │
-│ Ask AGY...               ↑  │
-└─────────────────────────────┘
-```
-
-Keep it visually native to Obsidian.
-
-Avoid:
-
-- excessive cards;
-- dashboard-like layouts;
-- large hero elements;
-- unnecessary navigation;
-- visual noise;
-- exposing protocol/debug data in the default UI.
-
----
-
-# Product States
-
-Design explicitly for these states:
-
-```text
-EMPTY
-  ↓ send
-RUNNING
-  ├─ cancel
-  ├─ error
-  └─ success
-       ↓
-ANSWER
-  ↓ edit proposal
-PROPOSAL
-  ├─ reject
-  └─ apply
-       ↓
-APPLIED
-```
-
-Also support:
-
-```text
-AGY_NOT_FOUND
-AGY_CRASHED
-INVALID_STREAM
-STALE_EDIT
-RESUME_FAILED
-```
-
-Failures must be understandable and recoverable.
-
----
-
-# Implementation Order
-
-Follow this order unless existing code materially changes the dependency graph.
-
-## Spike 1 — Chat Transport
-
-Build:
-
-```text
-Obsidian ItemView
-  ↓
-selection
-  ↓
-AGY
-  ↓
-streamed response
-```
-
-Acceptance:
-
-- sidebar opens;
-- AGY detected;
-- prompt sends;
-- output streams;
-- cancel works;
-- unload kills process.
-
----
-
-## Spike 2 — Context
-
-Build:
-
-- `ContextService`
-- selection context
-- current-note fallback
-- visible context chips
-
-Acceptance:
-
-- correct note/selection is sent;
-- context updates when active note changes;
-- stale selection is never reused.
-
----
-
-## Spike 3 — Edit Proposal
-
-Build:
-
-- structured `EditProposal`;
-- proposal parser;
-- validation;
-- diff preview;
-- Reject action.
-
-Do not write files yet.
-
----
-
-## Spike 4 — Apply + Undo
-
-Build:
-
-- final validation at Apply time;
-- safe range replacement;
-- editor transaction;
-- Undo support.
-
-Acceptance:
-
-- correct Markdown changes;
-- stale proposal rejected;
-- Ctrl/Cmd+Z restores previous state.
-
-At this point the core MVP exists.
-
----
-
-## Spike 5 — Session + Model UX
-
-Build:
-
-- model selector;
-- `agy models` discovery if supported;
-- new chat;
-- persistent session;
-- conversation resume.
-
-Avoid hard-coding provider model lists if AGY can provide them.
-
----
-
-## Spike 6 — Hardening + Packaging
-
-Build:
-
-- process cleanup;
-- error recovery;
-- permissions UX;
-- keyboard shortcuts;
-- manifest/build packaging;
-- installation test.
-
-Then release v0.1.
-
----
-
-# Definition of Done for v0.1
-
-All must pass:
-
-```text
-Open note
-  ↓
-select paragraph
-  ↓
-open AI sidebar
-  ↓
-ask AGY
-  ↓
-stream answer
-  ↓
-request edit
-  ↓
-see diff
-  ↓
-Apply
-  ↓
-note updates correctly
-  ↓
-Ctrl/Cmd+Z restores original text
-```
-
-And:
-
-- no orphan processes;
-- plugin survives reload/restart;
-- missing AGY shows actionable error;
-- AGY crash does not crash Obsidian;
-- stale edits cannot overwrite newer user changes;
-- current context is visible;
-- model/session state behaves predictably.
-
----
-
-# Engineering Rules
-
-## Keep boundaries explicit
-
-Ask for each module:
-
-```text
-What data does it own?
-What behavior does it own?
-What external dependency does it wrap?
-Why would this file change?
-```
-
-If two responsibilities change for different reasons, split them.
-
-If two files always change together and represent one responsibility, consider colocating them.
-
----
-
-## Dependency direction
-
-Allowed:
-
-```text
-UI → application → contracts → adapters
-```
-
-Avoid:
-
-```text
-AgyAdapter → ChatView
-EditService → UI components
-ContextService → process spawning
-```
-
-No circular dependencies.
-
----
-
-## KISS
-
-Prefer:
-
-- functions before classes when lifecycle/state does not require a class;
-- explicit types;
-- small modules;
-- direct Obsidian APIs;
-- direct Node process APIs;
-- simple state machines.
-
-Avoid:
-
-- DI containers;
-- event buses without demonstrated need;
-- generic repositories;
-- abstract factories;
-- unnecessary wrapper layers;
-- home-grown framework code.
-
----
-
-## DRY
-
-Deduplicate only when code represents the same concept and should evolve together.
-
-Do not abstract code only because it looks similar.
-
----
-
-## Changes
-
-When modifying existing code:
-
-1. Inspect the relevant implementation first.
-2. Understand existing conventions.
-3. Change the smallest coherent surface.
-4. Remove superseded code.
-5. Do not leave old and new implementations running in parallel without a compatibility reason.
-6. Verify the actual user flow, not only unit-level behavior.
-
----
-
-# Testing Strategy
-
-Test the highest-risk boundaries.
-
-Priority:
-
-```text
-1. AGY protocol parsing
-2. process lifecycle
-3. context resolution
-4. stale edit detection
-5. Apply / Undo
-6. session restore
-```
-
-Use unit tests where logic is deterministic.
-
-Use integration/E2E tests for:
-
-```text
-Obsidian editor
-    ↕
-plugin
-    ↕
-AGY process
-```
-
-Do not chase coverage percentage.
-
-Test behavior that would hurt the user if broken.
-
----
-
-# Verification Before Finishing a Task
-
-Before claiming completion:
-
-1. Run typecheck.
-2. Run lint if configured.
-3. Run relevant tests.
-4. Build the plugin.
-5. Exercise the changed user flow.
-6. Check plugin unload/reload if process behavior changed.
-7. Check Undo if editing behavior changed.
-8. Verify no unexpected files/processes remain.
-
-Report:
-
-```text
-what changed
-what was verified
-what remains intentionally out of scope
-```
-
-Do not report a feature as complete if only the UI mock exists and the underlying behavior is not wired.
-
----
-
-# Decision Rule
-
-When uncertain between two designs, choose the one that makes this graph simpler:
-
-```text
-user intent
-   ↓
-explicit context
-   ↓
-agent
-   ↓
-normalized result
-   ↓
-user-approved mutation
-```
-
-The product should feel like Obsidian gained an AI collaborator, not like a separate AI application was embedded inside it.
+Never silently rebase a stale or ambiguous proposal. Apply through Obsidian
+APIs so native undo remains available.
+
+### Process lifecycle
+
+- Spawn the configured agent runtime only when needed.
+- Pass user content as arguments, never through shell interpolation.
+- Capture stderr and convert malformed or failed streams into recoverable UI
+  errors.
+- Cancel and dispose child processes on stop, view close, and plugin unload.
+- Never expose raw provider protocol events in the UI.
+
+## 8. Final review
+
+Before declaring a slice complete:
+
+1. Confirm the requested observable behavior works.
+2. Re-read the actual diff, including untracked files relevant to the change.
+3. Check ownership, dependency direction, stale paths, and failure propagation.
+4. Run the smallest relevant gates, then the repository fast gate.
+5. Confirm generated artifacts are current and unrelated dirty work is intact.
+6. Report what changed, what passed, what was not runnable, and what remains out
+   of scope.
+
+Do not commit, push, create branches, or deploy unless explicitly requested.

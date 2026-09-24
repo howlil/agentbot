@@ -1,6 +1,7 @@
-import { ChatSession, AgyModel } from "../types";
+import { ChatSession } from "../types";
 
-const STORE_KEY = "agy-sessions";
+const STORE_KEY = "forge-sessions";
+const LEGACY_STORE_KEY = "agy-sessions";
 const DEFAULT_MODEL = "gemini-3.8-flash-medium";
 
 interface StoreData {
@@ -24,8 +25,9 @@ export class SessionStore {
 
   /** Call once on plugin load. */
   async load(rawData: Record<string, unknown> | null): Promise<void> {
-    if (rawData && rawData[STORE_KEY]) {
-      this.data = rawData[STORE_KEY] as StoreData;
+    const stored = rawData?.[STORE_KEY] ?? rawData?.[LEGACY_STORE_KEY];
+    if (stored) {
+      this.data = stored as StoreData;
     }
   }
 

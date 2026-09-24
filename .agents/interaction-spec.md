@@ -1,21 +1,22 @@
-# Interaction Spec — AGY Obsidian Plugin v0
+# Interaction Spec — Forge Obsidian Plugin v0
 
 > Scope: vertical slice only — `EMPTY → RUNNING → PROPOSAL → APPLIED`.  
-> No ANSWER-only path, no @note mention, no model selector. Those are second.
+> The prompt bar also exposes model selection, explicit text-file context, and
+> keyboard-friendly `@` / `/` menus.
 
 ---
 
 ## 1. Surface
 
 Single `ItemView` mounted in Obsidian right sidebar.  
-View type ID: `agy-sidebar`.  
+View type ID: `forge-sidebar`.
 Tab icon: robot / sparkle icon from Obsidian's `addRibbonIcon`.
 
 Layout (fixed, non-scrollable shell):
 
 ```
 ┌─────────────────────────────────┐  ← sidebar shell
-│ header (fixed)                  │
+│ header + mode tabs (fixed)      │
 ├─────────────────────────────────┤
 │ thread (flex-grow, scrollable)  │
 ├─────────────────────────────────┤
@@ -28,24 +29,30 @@ Layout (fixed, non-scrollable shell):
 ## 2. Component tree
 
 ```
-AgyView (ItemView)
+ ForgeView (ItemView)
  ├── Header
- │    └── title "AGY"
+ │    ├── Forge identity + new session
+ │    └── ModeTabs [Ask] [Explain] [Practice] [Review] [Edit]
  ├── Thread
  │    ├── EmptySlate        [visible in EMPTY]
  │    ├── MessageBubble[]   [visible in RUNNING / PROPOSAL / APPLIED]
  │    │    ├── UserBubble
- │    │    ├── AgyBubble (streaming markdown)
+ │    │    ├── AgentBubble (word-resolving stream → rendered Markdown + actions)
  │    │    └── ProposalBubble
  │    │         ├── DiffBlock
  │    │         └── ActionRow  [Reject] [Apply]
- │    └── StatusLine         [visible in RUNNING]
+ │    └── ThinkingTrace      [expandable steps + elapsed timer in RUNNING]
  └── Composer
       ├── ContextChips
       │    ├── SelectionChip   [auto, when selection exists]
       │    └── NoteChip        [auto, always]
-      ├── Textarea
-      └── SendButton
+      └── ComposerCard
+           ├── AttachmentChips
+           ├── AddContextMenu      [`@` sources / text files]
+           ├── Textarea             [`/` learning actions]
+           ├── ModelSelector
+           ├── DictationButton      [when supported by the host]
+           └── SendButton / StopButton
 ```
 
 ---
@@ -55,7 +62,7 @@ AgyView (ItemView)
 ### EMPTY
 
 **Visible:**
-- EmptySlate: centered text "Ask AGY about this note"
+- EmptySlate: centered text "Ask Forge about this note"
 - Composer active, context chips shown
 - SelectionChip shown only when editor has a selection
 
@@ -73,8 +80,9 @@ AgyView (ItemView)
 
 **Visible:**
 - UserBubble with the sent message
-- StatusLine: "Reading selection…" or "Reading <note name>…"
-- AgyBubble with streaming cursor (text appends token by token)
+- ThinkingTrace: expandable context/policy/response steps, shimmer "Thinking"
+  label, and a live elapsed timer
+- AgentBubble resolves streamed words from blur with a live cursor
 
 **Inactive / disabled:**
 - SendButton disabled
@@ -82,16 +90,16 @@ AgyView (ItemView)
 - ContextChips locked (no add/remove during run)
 
 **Transitions out:**
-- AGY emits `event_type: text` tokens → stream into AgyBubble
-- AGY emits `event_type: edit_proposal` → append ProposalBubble, transition to PROPOSAL
-- AGY emits `event_type: error` → show inline error in AgyBubble, re-enable Composer
+- Agent runtime emits text tokens → stream into AgentBubble
+- Agent runtime emits an edit proposal → append ProposalBubble, transition to PROPOSAL
+- Agent runtime emits an error → show inline error in AgentBubble, re-enable Composer
 
 ---
 
 ### PROPOSAL
 
 **Visible:**
-- Full conversation thread (UserBubble + AgyBubble optional prose)
+- Full conversation thread (UserBubble + AgentBubble optional prose)
 - ProposalBubble:
   ```
   ┌──────────────────────────────┐
@@ -175,7 +183,7 @@ type AgentEvent =
   | { type: 'error';    message: string };
 ```
 
-UI renders events in order. Multiple `text` events → append to AgyBubble.  
+UI renders events in order. Multiple `text` events → append to AgentBubble.
 One `proposal` event → render ProposalBubble (only one per turn in v0).
 
 ---
@@ -207,10 +215,10 @@ function applyProposal(proposal: EditProposal, editor: Editor): void {
 
 | Trigger | Where shown | Recovery |
 |---|---|---|
-| AGY CLI not found | Replaces Thread with ERROR slate | [Configure] button (open settings) |
+| Agent runtime unavailable | Replaces Thread with ERROR slate | [Configure runtime] button |
 | `proposal.before` not found in file | Inline error below ProposalBubble | Diff stays visible; user can Reject |
-| Stream interrupted | Inline error in AgyBubble | Composer re-enabled |
-| Timeout (>30 s, no event) | Inline error in AgyBubble | Composer re-enabled |
+| Stream interrupted | Inline error in AgentBubble | Composer re-enabled |
+| Timeout (>30 s, no event) | Inline error in AgentBubble | Composer re-enabled |
 
 ---
 
@@ -223,24 +231,26 @@ AC-1  sidebar opens via ribbon icon
 AC-2  context chip shows @selection when text is selected
 AC-3  context chip shows @<note> always
 AC-4  typing and sending triggers RUNNING state
-AC-5  StatusLine shows "Reading selection…" or "Reading <note>…"
-AC-6  text tokens stream into AgyBubble, appended incrementally
-AC-7  ProposalBubble renders before/after lines with correct colors
-AC-8  Apply replaces exact text in editor
-AC-9  Ctrl+Z reverts the Applied change in one undo step
-AC-10 Reject leaves file unchanged, shows rejected badge
-AC-11 ERROR slate appears when AGY CLI not found, sidebar does not crash
-AC-12 timeout after 30 s re-enables composer, shows inline error
+AC-5  ThinkingTrace expands while running and settles into a collapsible
+      completed trace with elapsed time
+AC-6  streamed words resolve into AgentBubble, then Markdown renders and Copy
+      becomes available after completion
+AC-7  prompt bar can attach text context, choose `/` actions, and change model
+      without bypassing `LearningController`
+AC-8  ProposalBubble renders before/after lines with correct colors
+AC-9  Apply replaces exact text in editor
+AC-10 Ctrl+Z reverts the Applied change in one undo step
+AC-11 Reject leaves file unchanged, shows rejected badge
+AC-12 ERROR slate appears when the agent runtime is unavailable, sidebar does not crash
+AC-13 timeout re-enables composer, shows inline error
 ```
 
 ---
 
 ## 10. Out of this spec
 
-- Model selector
 - @file manual mention
 - Multiple proposals per turn
 - Session persistence
 - Keyboard shortcut (Ctrl+L)
-- Markdown rendering in AgyBubble (plain text first)
 - Animation / transitions

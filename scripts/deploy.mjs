@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
 
+const PLUGIN_ID = "forge-obsidian";
+
 // Known default vault paths (ordered by recent usage)
 const DEFAULT_VAULTS = [
   path.join(process.env.USERPROFILE || "", "Documents", "howlil"),
@@ -18,7 +20,7 @@ if (!targetVault) {
   process.exit(1);
 }
 
-const pluginDest = path.join(targetVault, ".obsidian", "plugins", "agy-obsidian");
+const pluginDest = path.join(targetVault, ".obsidian", "plugins", PLUGIN_ID);
 const distDir = path.resolve("dist");
 
 if (!fs.existsSync(distDir)) {
@@ -45,14 +47,14 @@ try {
   if (fs.existsSync(communityPluginsPath)) {
     plugins = JSON.parse(fs.readFileSync(communityPluginsPath, "utf-8"));
   }
-  if (!plugins.includes("agy-obsidian")) {
-    plugins.push("agy-obsidian");
+  if (!plugins.includes(PLUGIN_ID)) {
+    plugins.push(PLUGIN_ID);
     fs.writeFileSync(communityPluginsPath, JSON.stringify(plugins, null, 2), "utf-8");
-    console.log("  ✓ Added 'agy-obsidian' to community-plugins.json");
+    console.log(`  ✓ Added '${PLUGIN_ID}' to community-plugins.json`);
   }
 } catch (err) {
   console.warn("  ⚠ Could not auto-enable in community-plugins.json:", err.message);
 }
 
-console.log(`\n🎉 Successfully deployed agy-obsidian to:`);
+console.log(`\n🎉 Successfully deployed ${PLUGIN_ID} to:`);
 console.log(`   ${pluginDest}\n`);

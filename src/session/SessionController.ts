@@ -4,8 +4,8 @@ import {
   AgentAdapter,
   AgentContext,
   AgentInput,
-  AgyModel,
-  AgyStreamEvent,
+  AgentModel,
+  AgentStreamEvent,
   ChatSession,
 } from "../types";
 
@@ -18,7 +18,7 @@ import {
  */
 export class SessionController {
   private currentSession: ChatSession | null = null;
-  private models: AgyModel[] = [];
+  private models: AgentModel[] = [];
 
   constructor(
     private readonly plugin: Plugin,
@@ -71,7 +71,7 @@ export class SessionController {
     }
   }
 
-  getModels(): AgyModel[] {
+  getModels(): AgentModel[] {
     return this.models;
   }
 
@@ -86,7 +86,7 @@ export class SessionController {
     prompt: string,
     context: AgentContext[] = [],
     displayPrompt: string = prompt,
-  ): AsyncIterable<AgyStreamEvent> {
+  ): AsyncIterable<AgentStreamEvent> {
     const session = this.getSession();
     const input: AgentInput = { prompt, context };
 

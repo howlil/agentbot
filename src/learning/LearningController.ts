@@ -1,7 +1,7 @@
 import {
   AgentContext,
   ApplyResult,
-  AgyModel,
+  AgentModel,
   ChatSession,
   EditProposal,
 } from "../types";
@@ -32,7 +32,7 @@ import {
  *
  * The view sends user intent here. This controller owns orchestration:
  * context -> policy -> learning state -> action -> agent session -> normalized
- * UI events. It deliberately hides AGY transport details from the UI.
+ * UI events. It deliberately hides provider transport details from the UI.
  */
 export class LearningController {
   private practiceSession: PracticeSession | null = null;
@@ -53,7 +53,7 @@ export class LearningController {
     return this.sessions.getSession();
   }
 
-  getModels(): AgyModel[] {
+  getModels(): AgentModel[] {
     return this.sessions.getModels();
   }
 
