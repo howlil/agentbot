@@ -92,7 +92,7 @@ export class AgyAdapter implements AgentAdapter {
 
     return new Promise((resolve, reject) => {
       const locator = process.platform === "win32" ? "where" : "which";
-      const process = spawn(locator, ["agy"]);
+      const child = spawn(locator, ["agy"]);
       let out = "";
       let settled = false;
 
@@ -106,11 +106,11 @@ export class AgyAdapter implements AgentAdapter {
         );
       };
 
-      process.stdout?.on("data", (data: Buffer) => {
+      child.stdout?.on("data", (data: Buffer) => {
         out += data.toString();
       });
-      process.on("error", fail);
-      process.on("close", (code) => {
+      child.on("error", fail);
+      child.on("close", (code) => {
         if (settled) return;
 
         if (code === 0 && out.trim()) {
@@ -367,21 +367,21 @@ export class AgyAdapter implements AgentAdapter {
     const bin = await this.resolveBinary();
 
     return new Promise((resolve, reject) => {
-      const process = spawn(bin, ["models"], {
+      const child = spawn(bin, ["models"], {
         cwd: this.cwd,
         windowsHide: true,
       });
       let out = "";
       let err = "";
 
-      process.stdout?.on("data", (data: Buffer) => {
+      child.stdout?.on("data", (data: Buffer) => {
         out += data.toString();
       });
-      process.stderr?.on("data", (data: Buffer) => {
+      child.stderr?.on("data", (data: Buffer) => {
         err += data.toString();
       });
-      process.on("error", reject);
-      process.on("close", (code) => {
+      child.on("error", reject);
+      child.on("close", (code) => {
         if (code !== 0) {
           reject(
             new Error(
