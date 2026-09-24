@@ -11,6 +11,14 @@ import {
   SendOptions,
 } from "../types";
 
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 // AGY print-mode protocol used by this adapter:
 //
 //   agy --print <prompt> --output-format stream-json [--model <id>]
@@ -134,13 +142,11 @@ export class AgyAdapter implements AgentAdapter {
     if (ctx.length === 0) return "";
 
     return ctx
-      .map((c) => {
-        const label =
-          c.type === "selection"
-            ? `[Selected text from ${c.file}]`
-            : `[Note: ${c.file}]`;
+      .map((c, index) => {
+        const type = c.type === "selection" ? "selection" : "note";
+        const header = `<obsidian-context index="${index + 1}" type="${type}" file="${escapeAttribute(c.file)}">`;
 
-        return `${label}\n\`\`\`\n${c.content}\n\`\`\``;
+        return `${header}\n${c.content}\n</obsidian-context>`;
       })
       .join("\n\n");
   }
