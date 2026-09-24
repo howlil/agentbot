@@ -1,5 +1,10 @@
 import { AgentContext, EditProposal } from "../types";
 import { LearningContext } from "../context/context-types";
+import { LearningState } from "./learning-state";
+import {
+  PracticeEvaluation,
+  PracticeQuestion,
+} from "./practice-types";
 
 export type LearningActionKind =
   | "ask"
@@ -24,8 +29,20 @@ export type LearningEvent =
       text: string;
     }
   | {
+      type: "practice-question";
+      question: PracticeQuestion;
+    }
+  | {
+      type: "practice-evaluation";
+      evaluation: PracticeEvaluation;
+    }
+  | {
       type: "mutation-proposed";
       proposal: EditProposal;
+    }
+  | {
+      type: "learning-state-updated";
+      state: LearningState;
     }
   | {
       type: "completed";
