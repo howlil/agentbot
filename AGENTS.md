@@ -1,5 +1,107 @@
 # AGENTS.md
 
+## Canonical Product Direction — Learning OS
+
+This section supersedes older chat-only product framing elsewhere in this file.
+
+The product is an **agent harness for a Learning OS inside Obsidian**, not merely
+an AI chat sidebar.
+
+Canonical system graph:
+
+```text
+learning goal
+  + current knowledge
+  + resolved note/selection context
+  + interaction history
+        ↓
+LearningController
+        ↓
+learning action
+├─ ask
+├─ explain
+├─ practice
+├─ review
+└─ edit
+        ↓
+understanding / durable learning state / approved vault changes
+```
+
+Current dependency direction:
+
+```text
+ChatView
+   ↓
+LearningController
+   ├─ ContextResolver
+   ├─ PolicyLoader
+   ├─ VaultLearningStore
+   ├─ MutationService
+   └─ SessionController
+          ↓
+       AgentAdapter
+          ↓
+       AgyAdapter
+          ↓
+        AGY CLI
+```
+
+Ownership rules:
+
+- `ChatView` renders state and captures user intent. It must not parse AGY
+  protocol, resolve learning context, evaluate practice answers, mutate notes,
+  or persist learning progress.
+- `LearningController` owns learning orchestration and maps runtime output into
+  learning events.
+- `ContextResolver` is the single source of truth for both visible context
+  chips and context sent to the agent.
+- `PolicyLoader` loads vault-root `AGENTS.md` as Learning OS policy.
+- `VaultLearningStore` owns durable evidence-backed progress in
+  `00-learning-os/progress.json`.
+- `MutationService` is the only normal path for user-approved Markdown
+  mutations. It must reject stale or ambiguous replacements.
+- `SessionController` owns conversation/model persistence only. Do not add
+  learning, context, or mutation responsibilities back into it.
+- `AgyAdapter` owns AGY process/protocol behavior. Upper layers must not know
+  AGY-specific events such as `step_update`.
+
+Learning-state invariant:
+
+```text
+interaction
+   ↓
+meaningful evidence?
+├─ no  → do not update progress
+└─ yes → evidence → gap/state transition → persist
+```
+
+A normal question is not proof of mastery. Practice evaluation can create
+evidence; one correct answer may mark an existing gap as improving, not
+automatically mastered/resolved.
+
+Practice invariant:
+
+```text
+generate question
+   ↓
+wait for user answer
+   ↓
+evaluate
+   ↓
+persist evidence
+   ↓
+next question or complete
+```
+
+The plugin owns the practice state transition. The model owns question
+generation and evaluation.
+
+Do not add RAG, embeddings, multi-agent orchestration, background autonomy, or
+provider proliferation until the Learning OS loop above is working reliably.
+
+---
+
+
 ## Purpose
 
 Build an Obsidian desktop plugin that provides a native AI chat sidebar backed by **AGY CLI**.
