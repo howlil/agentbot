@@ -34,7 +34,15 @@ Look only for issues that materially affect understanding:
 - misconceptions,
 - missing prerequisite relationships,
 - weak or misleading explanations.
-Explain each concrete gap and avoid cosmetic rewriting.
+
+Return findings as exactly one fenced block:
+
+\`\`\`learning-review
+{"kind":"review","findings":[{"kind":"misconception|missing-relation|factual-error|weak-explanation","concept":"specific concept","title":"short operational title","detail":"why this materially affects understanding"}]}
+\`\`\`
+
+Use an empty findings array when there is no material gap.
+Do not emit cosmetic writing suggestions.
 `.trim(),
 
   edit: `

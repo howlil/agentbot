@@ -17,7 +17,7 @@ export interface LearningEvidence {
 
 export interface LearningState {
   version: 1;
-  target: string;
+  target: string | null;
   currentTopic?: string;
   gaps: KnowledgeGap[];
   evidence: LearningEvidence[];
@@ -25,7 +25,7 @@ export interface LearningState {
 
 export const DEFAULT_LEARNING_STATE: LearningState = {
   version: 1,
-  target: "Backend Software Engineer",
+  target: null,
   gaps: [],
   evidence: [],
 };

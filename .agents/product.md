@@ -1,175 +1,37 @@
-# Product — Forge Obsidian Plugin
+# Product — Forge Learning OS for Obsidian
 
-## Problem
+Forge keeps understanding, practice, review, and safe AI editing beside the
+learning material already stored in Obsidian.
 
-**Actor:** Knowledge worker writing or studying inside Obsidian.  
-**Trigger:** User wants to understand or improve text in the current note without leaving it.  
-**Current behavior:** User switches to a browser or separate AI tool, copies text, pastes it, reads the answer, manually edits back. Flow breaks.  
-**Problem:** Switching context to an external AI tool interrupts writing flow, loses the spatial relationship between the question and the text, and makes applying AI suggestions a manual copy-paste step with no undo guarantee.  
-**Desired outcome:** Ask a question about the current note and receive a readable explanation *or* a diff-based edit proposal, inline in Obsidian, without leaving the editor — and be able to Apply the change as a single undoable transaction.
-
----
-
-## Behavior
-
-### Happy path — Ask
-
-```
-Note open in editor
-  ↓ user selects paragraph (optional)
-  ↓ opens Forge sidebar (Ctrl+L or icon)
-EMPTY state → "Ask Forge about this note"
-  ↓ user types prompt, sends
-THINKING state → "Forge working… Reading <note name>"
-  ↓ agent runtime streams response
-  ANSWER state → streamed markdown in conversation
-  ↓ job complete
+```text
+material + explicit context + learning state
+→ Forge
+→ explain / practice / review / edit
+→ understanding + evidence + approved vault change
 ```
 
-### Happy path — Edit
+Ask is default. Explain, Review, and Edit are one-shot intents. Practice is a
+persistent active-recall session.
 
-```
-ANSWER or EMPTY state
-  ↓ user sends prompt requesting a change
-THINKING state
-  ↓ agent runtime proposes patch
-DIFF state → diff preview rendered in conversation bubble
-              - old line
-              + new line
-              [Reject]   [Apply]
-  ↓ user clicks Apply
-APPLIED state → "✓ Updated <note name>"
-  ↓ Obsidian editor reflects change
-  ↓ Ctrl+Z reverses it (single editor transaction)
-  ↓ job complete
-```
+Automatic context is selection first, otherwise current note. Explicit context
+comes from `@vault-note` or attached text files. System policy/progress remains
+separate from user-selected sources.
 
-### Context resolution (automatic, transparent)
+Only meaningful evidence changes learning state. Practice evaluation and
+structured Review can create evidence. A correct answer is not automatic
+mastery.
 
-```
-Text selected in editor
-  → context = @selection   (shown in composer chip)
+Review emits only material gaps: misconception, missing relationship, factual
+error, or weak explanation. Findings can feed Practice or Edit.
 
-No selection
-  → context = @current-note (shown in composer chip)
+Editing is proposal → context authorization → diff → Apply/Reject → exact unique
+revalidation → Obsidian mutation. Native Undo remains available.
 
-User types @<name>
-  → additional context appended to request
-```
+Current scope: sidebar workspace, streaming Markdown, structured learning
+intents, note/selection/explicit context, model choice, practice evaluation,
+structured review, evidence-backed progress, safe diff approval, session
+persistence, and recoverable runtime states.
 
-### Failure state
-
-```
-Agent runtime not found or unreachable
-  → sidebar shows: "Agent unavailable — check Forge runtime settings"
-  → [Configure runtime] button
-  → all other sidebar elements disabled
-```
-
----
-
-## States
-
-| State     | What the user sees                                             |
-|-----------|----------------------------------------------------------------|
-| EMPTY     | Placeholder "Ask Forge about this note", context chip visible |
-| THINKING  | Spinner + "Reading \<note\>" status line, input disabled        |
-| ANSWER    | Streaming preview settles into rendered Markdown response     |
-| DIFF      | Diff block inside conversation bubble + Reject / Apply buttons |
-| APPLIED   | "✓ Updated \<note\>" confirmation, note already changed        |
-| ERROR     | "Agent unavailable" + Configure runtime button                |
-
-State transitions:
-
-```
-EMPTY ──send──→ THINKING ──stream──→ ANSWER
-                                      │
-                              edit proposed
-                                      ↓
-                                    DIFF
-                                   /    \
-                             Reject    Apply
-                               ↓         ↓
-                            ANSWER    APPLIED
-```
-
----
-
-## Constraints
-
-- **No magic context.** Every file the AI can read must be visible as a chip in the composer. No background vault indexing, embeddings, or implicit file reading.
-- **Edits are atomic.** Apply must use a single Obsidian editor transaction so native Undo works without special handling.
-- **Sidebar only.** Forge lives in the Obsidian right sidebar. No separate dashboard, history page, or workspace page.
-- **Runtime boundary.** Forge depends on a configured agent runtime behind `AgentAdapter`. The plugin does not expose provider-specific protocol or bundle the model runtime.
-- **Obsidian platform.** All UI must be a standard Obsidian ItemView. No external browser window or full-page takeover.
-- **Minimal UI surface.** No toolbar heavy with mode switches, token counters, agent status panels, or settings embedded in the sidebar chat.
-
----
-
-## Scope
-
-**In v0:**
-- Right sidebar chat panel
-- Streaming agent response (ANSWER state)
-- Rendered Markdown in response bubbles (headings, lists, links, code)
-- Model selector (single dropdown in header)
-- `@current-note` context (auto, shown as chip)
-- `@selection` context (auto when text selected, shown as chip)
-- `@<file>` manual context via mention
-- Markdown diff proposal (DIFF state) with Apply / Reject
-- Apply as single editor transaction (Undo-safe)
-- ERROR / unavailable state with Configure action
-
-**Out of v0 (explicitly deferred):**
-- Agent mode (multi-step, multi-file, terminal)
-- Background vault indexing / RAG / embeddings
-- Multiple providers or runtime management UI
-- Chat history browser or branching
-- Prompt marketplace
-- MCP manager UI
-- Complex session manager
-- Automatic file mutation without diff preview
-
----
-
-## Proof
-
-```
-Given: note open in editor, paragraph selected
-When:  user opens Forge sidebar and types "perbaiki penjelasan ini"
-Then:  THINKING state shows "Reading <selection>"
-       DIFF state renders before/after lines
-       clicking Apply changes the note text immediately
-       Ctrl+Z reverses the change in one step
-       no browser tab or external window was opened
-```
-
-```
-Given: the configured agent runtime is unavailable
-When:  user opens the Forge sidebar
-Then:  ERROR state is shown with "Agent unavailable"
-       [Configure runtime] is the only actionable element
-       no crash, no blank panel
-```
-
-```
-Given: no text selected, note open
-When:  user sends any message
-Then:  context chip shows "@current-note"
-       Agent response references the current note, not vault-wide content
-```
-
-```
-Given: the agent runtime returns Markdown with a heading, list, or fenced code block
-When:  the response finishes streaming
-Then:  Forge renders the Markdown structure in the response bubble
-       and does not show the Markdown markers as raw text
-```
-
----
-
-## Assumptions
-
-- A configured agent runtime can be invoked through `AgentAdapter`.
-- Diff format from the runtime is line-level (unified diff or equivalent) and can be rendered without a full LSP.
-- Obsidian's editor API (CodeMirror 6) supports atomic multi-line replacement via a single transaction.
+Deferred: RAG, embeddings, background indexing, autonomous mutation, multi-agent
+orchestration, progress dashboards, course builders, scheduling, and provider
+management UI.

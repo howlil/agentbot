@@ -32,6 +32,24 @@ export class ContextResolver {
     };
   }
 
+  searchNotes(
+    query: string,
+    limit = 8,
+  ): Array<{ path: string; name: string }> {
+    return this.obsidian.searchNotes(query, limit);
+  }
+
+  async loadExplicitNote(path: string): Promise<AgentContext | null> {
+    const note = await this.obsidian.loadNote(path);
+    if (!note) return null;
+
+    return {
+      type: "note",
+      file: note.file,
+      content: note.content,
+    };
+  }
+
   /**
    * Convert resolved learning context to the existing agent transport shape.
    * Only one automatic primary material is included:

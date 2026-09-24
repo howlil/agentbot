@@ -9,6 +9,7 @@ import {
   PracticeEvaluation,
   PracticeQuestion,
 } from "../learning/practice-types";
+import { ReviewFinding } from "../learning/review-types";
 import { AgentContext, ChatMessage, EditProposal } from "../types";
 import { ProposedEdit } from "../learning/learning-types";
 
@@ -34,18 +35,32 @@ const ACTIONS: Array<{
 ];
 
 const PROMPT_COMMANDS: Array<{
-  kind: LearningActionKind;
+  kind: Exclude<LearningActionKind, "ask">;
   name: string;
   description: string;
 }> = [
-  { kind: "ask", name: "/ask", description: "Ask about the current context" },
-  { kind: "explain", name: "/explain", description: "Break down a concept" },
-  { kind: "practice", name: "/practice", description: "Generate a practice question" },
-  { kind: "review", name: "/review", description: "Review understanding and gaps" },
-  { kind: "edit", name: "/edit", description: "Improve the current note" },
+  { kind: "explain", name: "Explain", description: "Break down the current concept" },
+  { kind: "practice", name: "Practice", description: "Start active recall" },
+  { kind: "review", name: "Review", description: "Find important learning gaps" },
+  { kind: "edit", name: "Edit", description: "Improve the current note safely" },
 ];
 
 type PromptMenuKind = "source" | "command";
+
+type PromptMenuAction =
+  | { type: "attach" }
+  | { type: "info" }
+  | { type: "vault-note"; path: string }
+  | { type: "learning"; kind: Exclude<LearningActionKind, "ask"> };
+
+interface PromptMenuItem {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  disabled?: boolean;
+  action: PromptMenuAction;
+}
 
 function parsePromptToken(value: string): {
   kind: PromptMenuKind;
@@ -79,10 +94,12 @@ export class ChatView extends ItemView {
   private fileInput!: HTMLInputElement;
   private promptPlusBtn!: HTMLButtonElement;
   private attachmentsEl: HTMLElement | null = null;
+  private intentEl: HTMLElement | null = null;
   private promptMenuEl: HTMLElement | null = null;
   private promptMenu: PromptMenuKind | null = null;
   private promptMenuActive = 0;
   private promptMenuRows: HTMLButtonElement[] = [];
+  private promptMenuRequest = 0;
   private dictationRecognition: any = null;
   private dictationListening = false;
   private attachments: Array<{ name: string; context: AgentContext }> = [];
@@ -107,7 +124,9 @@ export class ChatView extends ItemView {
 
   private uiState: UIState = "EMPTY";
   private selectedAction: LearningActionKind = "ask";
+  private runningAction: LearningActionKind | null = null;
   private actionButtons = new Map<LearningActionKind, HTMLButtonElement>();
+  private systemContextFiles: string[] = [];
 
   private extraCtx: AgentContext[] = [];
   private currentContext: LearningContext | null = null;
@@ -213,8 +232,7 @@ export class ChatView extends ItemView {
       this.attachments = [];
       this.renderAttachments();
       this.closePromptMenu();
-      this.selectedAction = "ask";
-      this.syncActionButtons();
+      this.setAction("ask");
       await this.syncChips();
       this.showEmpty();
     });
@@ -320,6 +338,10 @@ export class ChatView extends ItemView {
           !(event.target instanceof HTMLSelectElement)) {
         this.input.focus();
       }
+    });
+
+    this.intentEl = box.createDiv({
+      cls: "forge-intent-row forge-hidden",
     });
 
     this.attachmentsEl = box.createDiv({
@@ -498,139 +520,161 @@ export class ChatView extends ItemView {
     this.input.focus();
   }
 
-  private getPromptMenuItems(): Array<{
-    key: string;
-    name: string;
-    description: string;
-    action: "attach" | "selection" | "note" | LearningActionKind;
-  }> {
+  private async getPromptMenuItems(): Promise<PromptMenuItem[]> {
     if (this.promptMenu === "command") {
       return PROMPT_COMMANDS.map((command) => ({
         key: command.kind,
         name: command.name,
         description: command.description,
-        action: command.kind,
+        icon: "/",
+        action: { type: "learning" as const, kind: command.kind },
       }));
     }
 
-    const items: Array<{
-      key: string;
-      name: string;
-      description: string;
-      action: "attach" | "selection" | "note";
-    }> = [
-      {
-        key: "attach",
-        name: "Add text files",
-        description: "Attach Markdown or data context",
-        action: "attach",
-      },
-    ];
+    const items: PromptMenuItem[] = [];
+    const token = parsePromptToken(this.input.value);
+    const query = token?.kind === "source" ? token.query : "";
 
     if (this.currentContext?.selection) {
       items.push({
-        key: "selection",
+        key: "current-selection",
         name: "Current selection",
-        description: "Use the selected text",
-        action: "selection",
+        description: this.currentContext.selection.file,
+        icon: "✓",
+        disabled: true,
+        action: { type: "info" },
+      });
+    } else if (this.currentContext?.activeNote) {
+      items.push({
+        key: "current-note",
+        name: this.currentContext.activeNote.path.split("/").pop() ??
+          this.currentContext.activeNote.path,
+        description: "Current note · automatic context",
+        icon: "✓",
+        disabled: true,
+        action: { type: "info" },
       });
     }
 
-    if (this.currentContext?.activeNote) {
-      items.push({
-        key: "note",
-        name: "Current note",
-        description: "Use the active note",
-        action: "note",
-      });
+    if (query) {
+      const excluded = new Set([
+        this.currentContext?.activeNote?.path,
+        this.currentContext?.selection?.file,
+        ...this.extraCtx.map((item) => item.file),
+      ].filter((value): value is string => Boolean(value)));
+
+      for (const note of this.learning.searchNotes(query, 6)) {
+        if (excluded.has(note.path)) continue;
+        items.push({
+          key: `note:${note.path}`,
+          name: note.name,
+          description: note.path,
+          icon: "@",
+          action: { type: "vault-note", path: note.path },
+        });
+      }
     }
+
+    items.push({
+      key: "attach",
+      name: "Attach text file",
+      description: "Markdown, text, CSV, JSON, or YAML",
+      icon: "＋",
+      action: { type: "attach" },
+    });
 
     return items;
   }
 
-  private renderPromptMenu(): void {
+  private async renderPromptMenu(): Promise<void> {
     if (!this.promptMenuEl) return;
 
+    const requestId = ++this.promptMenuRequest;
     this.promptMenuEl.empty();
     this.promptMenuRows = [];
     this.promptMenuEl.toggleClass("forge-hidden", this.promptMenu === null);
-    this.promptPlusBtn?.setAttribute(
-      "aria-expanded",
-      String(this.promptMenu !== null),
-    );
-
+    this.promptPlusBtn?.setAttribute("aria-expanded", String(this.promptMenu !== null));
     if (!this.promptMenu) return;
 
     const token = parsePromptToken(this.input.value);
     const query = token?.kind === this.promptMenu ? token.query : "";
-    const rows = this.getPromptMenuItems().filter((item) =>
-      `${item.name} ${item.description}`.toLowerCase().includes(query),
-    );
+    const rows = await this.getPromptMenuItems();
+    if (requestId !== this.promptMenuRequest || !this.promptMenu) return;
 
-    rows.forEach((item, index) => {
-      const button = this.promptMenuEl!.createEl("button", {
-        cls: `forge-prompt-menu-row${index === this.promptMenuActive ? " is-active" : ""}`,
+    let interactiveIndex = 0;
+    for (const item of rows) {
+      const menuIndex = item.disabled ? -1 : interactiveIndex++;
+      const button = this.promptMenuEl.createEl("button", {
+        cls: `forge-prompt-menu-row${menuIndex === this.promptMenuActive ? " is-active" : ""}`,
         attr: { type: "button" },
       });
-      button.createSpan({ cls: "forge-prompt-menu-icon", text: item.action === "attach" ? "＋" : "@" });
+      button.disabled = Boolean(item.disabled);
+      button.createSpan({ cls: "forge-prompt-menu-icon", text: item.icon });
       button.createSpan({ cls: "forge-prompt-menu-name", text: item.name });
       button.createSpan({ cls: "forge-prompt-menu-description", text: item.description });
-      button.addEventListener("mouseenter", () => {
-        this.promptMenuActive = index;
-        this.promptMenuRows.forEach((row, rowIndex) => {
-          row.toggleClass("is-active", rowIndex === this.promptMenuActive);
-        });
-      });
-      button.addEventListener("click", () => this.pickPromptMenuItem(item));
-      this.promptMenuRows.push(button);
-    });
 
-    if (rows.length === 0) {
-      this.promptMenuEl.createDiv({
-        cls: "forge-prompt-menu-empty",
-        text: `No matches for “${query}”`,
-      });
+      if (!item.disabled) {
+        button.addEventListener("mouseenter", () => {
+          this.promptMenuActive = menuIndex;
+          this.promptMenuRows.forEach((row, index) => {
+            row.toggleClass("is-active", index === this.promptMenuActive);
+          });
+        });
+        button.addEventListener("click", () => void this.pickPromptMenuItem(item));
+        this.promptMenuRows.push(button);
+      }
     }
 
     this.promptMenuEl.createDiv({
       cls: "forge-prompt-menu-hint",
       text: this.promptMenu === "source"
-        ? "Select a source or attach a text file"
+        ? query ? "Select a note or attach a text file" : "Type @name to search vault notes"
         : "Choose a learning action",
     });
   }
 
-  private pickPromptMenuItem(item: {
-    name: string;
-    action: "attach" | "selection" | "note" | LearningActionKind;
-  }): void {
-    if (item.action === "attach") {
+  private async pickPromptMenuItem(item: PromptMenuItem): Promise<void> {
+    const action = item.action;
+    if (action.type === "attach") {
       this.closePromptMenu();
       this.fileInput.click();
       return;
     }
+    if (action.type === "info") return;
 
     const token = parsePromptToken(this.input.value);
     const prefix = token ? this.input.value.slice(0, token.start) : this.input.value;
 
-    if (item.action === "selection" || item.action === "note") {
-      this.input.value = `${prefix}@${item.action === "selection" ? "selection" : "current-note"} `;
-    } else {
-      this.selectedAction = item.action;
-      this.syncActionButtons();
-      this.updatePlaceholder();
-      this.input.value = `${prefix}${item.name} `;
+    if (action.type === "vault-note") {
+      const context = await this.learning.loadNoteContext(action.path);
+      if (context && !this.extraCtx.some((item) => item.file === context.file)) {
+        this.attachments.push({
+          name: context.file.split("/").pop() ?? context.file,
+          context,
+        });
+        this.extraCtx = this.attachments.map((item) => item.context);
+        this.renderAttachments();
+        await this.syncChips();
+      }
+      this.input.value = prefix;
+      this.closePromptMenu();
+      this.onInput();
+      this.input.focus();
+      return;
     }
 
+    this.setAction(action.kind);
+    this.input.value = prefix;
     this.closePromptMenu();
     this.onInput();
     this.input.focus();
   }
 
   private closePromptMenu(): void {
+    this.promptMenuRequest += 1;
     this.promptMenu = null;
     this.promptMenuActive = 0;
-    this.renderPromptMenu();
+    void this.renderPromptMenu();
   }
 
   private setupDictation(): void {
@@ -646,7 +690,7 @@ export class ChatView extends ItemView {
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = "id-ID";
+    recognition.lang = navigator.language || "en-US";
     recognition.onresult = (event: any) => {
       const transcript = event.results?.[0]?.[0]?.transcript?.trim();
       if (transcript) {
@@ -697,12 +741,44 @@ export class ChatView extends ItemView {
     this.dictationBtn.textContent = this.dictationListening ? "◌" : "◉";
   }
 
+  private setAction(action: LearningActionKind): void {
+    this.selectedAction = action;
+    this.syncActionButtons();
+    this.updatePlaceholder();
+  }
+
   private syncActionButtons(): void {
     for (const [kind, button] of this.actionButtons) {
       const active = kind === this.selectedAction;
       button.toggleClass("is-active", active);
       button.setAttribute("aria-pressed", String(active));
     }
+    this.renderIntent();
+  }
+
+  private renderIntent(): void {
+    if (!this.intentEl) return;
+    this.intentEl.empty();
+
+    const visible = this.selectedAction !== "ask";
+    this.intentEl.toggleClass("forge-hidden", !visible);
+    if (!visible) return;
+
+    const label = ACTIONS.find((item) => item.kind === this.selectedAction)?.label ?? this.selectedAction;
+    const chip = this.intentEl.createDiv({
+      cls: `forge-intent-chip forge-intent-chip--${this.selectedAction}`,
+    });
+    chip.createSpan({ cls: "forge-intent-label", text: label });
+
+    const remove = chip.createEl("button", {
+      cls: "forge-intent-remove",
+      text: "×",
+      attr: { type: "button", "aria-label": `Exit ${label} mode` },
+    });
+    remove.addEventListener("click", () => {
+      this.setAction("ask");
+      this.input.focus();
+    });
   }
 
   private updatePlaceholder(): void {
@@ -737,15 +813,23 @@ export class ChatView extends ItemView {
       this.noteChip.title = activeNote.path;
     }
 
-    const sourceName = context.selection
-      ? "Current selection"
+    const basePath = context.selection?.file ?? activeNote?.path;
+    const baseName = basePath?.split("/").pop();
+    const primary = context.selection
+      ? `@${baseName ?? "selection"} · selection`
       : activeNote
-        ? "Current note"
-        : this.extraCtx.length > 0
-          ? `${this.extraCtx.length} sources`
-          : "No context";
-    this.contextSelect.textContent = sourceName;
-    this.contextSelect.title = context.selection?.file ?? activeNote?.path ?? sourceName;
+        ? `@${baseName ?? "note"}`
+        : "No context";
+    const explicitCount = this.extraCtx.length;
+    this.contextSelect.textContent =
+      explicitCount > 0 ? `${primary} +${explicitCount}` : primary;
+
+    const details = [
+      basePath ? `Primary: ${basePath}` : "Primary: none",
+      ...this.extraCtx.map((item) => `Additional: ${item.file}`),
+      ...this.systemContextFiles.map((file) => `System: ${file}`),
+    ];
+    this.contextSelect.title = details.join("\n");
   }
 
   private onInput(): void {
@@ -826,6 +910,7 @@ export class ChatView extends ItemView {
     this.stopThinkingSequence();
     this.stopLoadingTimer();
 
+    this.runningAction = this.selectedAction;
     this.appendUserBubble(prompt);
     this.setUIState("RUNNING");
     this.ensureAgentBubble();
@@ -833,7 +918,7 @@ export class ChatView extends ItemView {
     try {
       for await (const event of this.learning.run({
         prompt,
-        action: this.selectedAction,
+        action: this.runningAction,
         explicitContext,
       })) {
         this.handleLearningEvent(event);
@@ -856,8 +941,9 @@ export class ChatView extends ItemView {
   private handleLearningEvent(event: LearningEvent): void {
     if (event.type === "context-ready") {
       this.currentContext = event.context.resolved;
+      this.systemContextFiles = event.context.system.map((item) => item.file);
       this.systemChip.toggleClass("forge-chip--hidden", event.context.system.length === 0);
-      this.systemChip.title = event.context.system.map((item) => item.file).join("\n");
+      this.systemChip.title = this.systemContextFiles.join("\n");
       return;
     }
 
@@ -874,12 +960,17 @@ export class ChatView extends ItemView {
 
     if (event.type === "practice-evaluation") {
       this.appendPracticeEvaluation(event.evaluation);
+      if (!event.evaluation.nextQuestion?.trim()) this.setAction("ask");
+      return;
+    }
+
+    if (event.type === "review-findings") {
+      this.appendReviewFindings(event.findings);
       return;
     }
 
     if (event.type === "learning-state-updated") {
-      // Durable progress is intentionally quiet. The interaction itself is the
-      // primary UI; progress state is supporting context for future turns.
+      this.appendProgressUpdate(event.state.currentTopic, event.state.gaps);
       return;
     }
 
@@ -890,10 +981,16 @@ export class ChatView extends ItemView {
     }
 
     if (event.type === "completed") {
-      if (this.uiState === "RUNNING") {
-        this.setUIState("ANSWER");
-      }
+      if (this.uiState === "RUNNING") this.setUIState("ANSWER");
       this.finishStreamingBubble();
+      if (
+        this.runningAction === "explain" ||
+        this.runningAction === "review" ||
+        this.runningAction === "edit"
+      ) {
+        this.setAction("ask");
+      }
+      this.runningAction = null;
       return;
     }
 
@@ -917,7 +1014,7 @@ export class ChatView extends ItemView {
     this.flushStreamingText();
     this.renderMarkdownResponse();
     if (doneLabel === undefined) this.appendStreamActions();
-    this.settleThinking(doneLabel ?? `Thought for ${elapsed}`);
+    this.settleThinking(doneLabel ?? `Completed in ${elapsed}`);
     if (this.responseTimeEl) this.responseTimeEl.textContent = `for ${elapsed}`;
     this.stopLoadingTimer();
     this.agentCursorEl?.removeClass("forge-bubble--streaming");
@@ -1095,9 +1192,7 @@ export class ChatView extends ItemView {
         attr: { type: "button" },
       });
       button.addEventListener("click", () => {
-        this.selectedAction = action;
-        this.syncActionButtons();
-        this.updatePlaceholder();
+        this.setAction(action);
         this.focusComposer();
       });
     }
@@ -1231,90 +1326,55 @@ export class ChatView extends ItemView {
   }
 
   private buildThinkingTrace(): HTMLElement {
-    const trace = this.thread.createDiv({
-      cls: "forge-thinking",
-    });
+    const trace = this.thread.createDiv({ cls: "forge-thinking" });
     trace.setAttribute("role", "status");
     trace.setAttribute("aria-live", "polite");
 
     const toggle = trace.createEl("button", {
       cls: "forge-thinking-toggle",
-      attr: {
-        type: "button",
-        "aria-expanded": "true",
-      },
+      attr: { type: "button", "aria-expanded": "false" },
     });
     this.thinkingToggleEl = toggle;
 
     toggle.createEl("img", {
       cls: "forge-thinking-logo",
-      attr: {
-        src: this.getLogoUrl(),
-        alt: "",
-      },
+      attr: { src: this.getLogoUrl(), alt: "" },
     });
 
     this.thinkingLabelEl = toggle.createSpan({
       cls: "forge-thinking-label forge-thinking-label--active",
-      text: "Thinking",
+      text: "Working",
     });
-
-    this.loadingElapsedEl = toggle.createSpan({
-      cls: "forge-thinking-elapsed",
-    });
+    this.loadingElapsedEl = toggle.createSpan({ cls: "forge-thinking-elapsed" });
     this.loadingElapsedEl.setAttribute("aria-hidden", "true");
 
-    const chevron = toggle.createSpan({
-      cls: "forge-thinking-chevron",
-      text: "⌄",
-    });
+    const chevron = toggle.createSpan({ cls: "forge-thinking-chevron", text: "⌄" });
     this.thinkingChevronEl = chevron;
 
-    const panel = trace.createDiv({
-      cls: "forge-thinking-panel is-expanded",
-    });
+    const panel = trace.createDiv({ cls: "forge-thinking-panel" });
     this.thinkingPanelEl = panel;
+    const list = panel.createDiv({ cls: "forge-thinking-trace forge-thinking-trace--facts" });
 
-    const traceList = panel.createDiv({
-      cls: "forge-thinking-trace",
-    });
-    const source = this.currentContext?.selection
-      ? this.currentContext.selection.file
-      : this.currentContext?.activeNote?.path;
-    const sourceName = source?.split("/").pop();
-    const readingLabel = this.currentContext?.selection
-      ? "Reading selected text"
-      : this.currentContext?.activeNote
-        ? "Reading current note"
-        : "Resolving workspace context";
-
-    const rows = [
-      { primary: "Resolving current context" },
-      { primary: readingLabel, secondary: sourceName },
-      { primary: "Loading Learning OS policy" },
-      { primary: "Preparing response" },
+    const source = this.currentContext?.selection?.file ?? this.currentContext?.activeNote?.path;
+    const facts: Array<{ primary: string; secondary?: string }> = [
+      {
+        primary: this.currentContext?.selection
+          ? "Current selection"
+          : this.currentContext?.activeNote ? "Current note" : "No automatic note context",
+        secondary: source?.split("/").pop(),
+      },
+      {
+        primary: "Learning intent",
+        secondary: ACTIONS.find((action) => action.kind === this.runningAction)?.label ?? "Ask",
+      },
     ];
 
-    this.thinkingRows = rows.map((row) => {
-      const rowEl = traceList.createDiv({
-        cls: "forge-thinking-row",
-      });
-      rowEl.createSpan({
-        cls: "forge-thinking-marker forge-thinking-marker--spinner",
-      });
-      rowEl.createSpan({
-        cls: "forge-thinking-primary",
-        text: row.primary,
-      });
-
-      if (row.secondary) {
-        rowEl.createSpan({
-          cls: "forge-thinking-secondary",
-          text: row.secondary,
-        });
-      }
-
-      return rowEl;
+    this.thinkingRows = facts.map((fact) => {
+      const row = list.createDiv({ cls: "forge-thinking-row is-done" });
+      row.createSpan({ cls: "forge-thinking-marker", text: "·" });
+      row.createSpan({ cls: "forge-thinking-primary", text: fact.primary });
+      if (fact.secondary) row.createSpan({ cls: "forge-thinking-secondary", text: fact.secondary });
+      return row;
     });
 
     toggle.addEventListener("click", () => {
@@ -1326,7 +1386,6 @@ export class ChatView extends ItemView {
     });
 
     this.startLoadingTimer();
-    this.startThinkingSequence();
     return trace;
   }
 
@@ -1457,7 +1516,7 @@ export class ChatView extends ItemView {
     if (!this.agentCursorEl) return;
 
     const card = this.agentCursorEl.createDiv({
-      cls: "forge-practice-evaluation",
+      cls: `forge-practice-evaluation forge-outcome--${evaluation.outcome}`,
     });
 
     const outcomeLabel =
@@ -1494,6 +1553,70 @@ export class ChatView extends ItemView {
     }
 
     this.scrollThread();
+  }
+
+  private appendReviewFindings(findings: ReviewFinding[]): void {
+    if (!this.agentCursorEl) return;
+
+    const wrap = this.agentCursorEl.createDiv({ cls: "forge-review" });
+    wrap.createDiv({
+      cls: "forge-review-summary",
+      text: findings.length === 0
+        ? "No material learning gaps found."
+        : `${findings.length} important ${findings.length === 1 ? "gap" : "gaps"}`,
+    });
+
+    for (const finding of findings) {
+      const card = wrap.createDiv({
+        cls: `forge-review-card forge-review-card--${finding.kind}`,
+      });
+      card.createDiv({ cls: "forge-review-kind", text: finding.kind.replace("-", " ") });
+      card.createDiv({ cls: "forge-review-title", text: finding.title });
+      card.createDiv({ cls: "forge-review-detail", text: finding.detail });
+
+      const actions = card.createDiv({ cls: "forge-review-actions" });
+      const practice = actions.createEl("button", {
+        cls: "forge-review-action",
+        text: "Practice",
+        attr: { type: "button" },
+      });
+      practice.addEventListener("click", () => {
+        this.setAction("practice");
+        this.input.value = `Practice this gap: ${finding.concept} — ${finding.detail}`;
+        this.onInput();
+        this.input.focus();
+      });
+
+      const fix = actions.createEl("button", {
+        cls: "forge-review-action",
+        text: "Fix",
+        attr: { type: "button" },
+      });
+      fix.addEventListener("click", () => {
+        this.setAction("edit");
+        this.input.value = `Fix this learning gap: ${finding.detail}`;
+        this.onInput();
+        this.input.focus();
+      });
+    }
+
+    this.scrollThread();
+  }
+
+  private appendProgressUpdate(
+    topic: string | undefined,
+    gaps: Array<{ status: string }>,
+  ): void {
+    if (!topic) return;
+    const open = gaps.filter((gap) => gap.status === "open").length;
+    const row = this.thread.createDiv({ cls: "forge-progress-row" });
+    row.createSpan({ cls: "forge-progress-mark", text: "✓" });
+    row.createSpan({
+      cls: "forge-progress-text",
+      text: open > 0
+        ? `Learning state updated · ${open} open ${open === 1 ? "gap" : "gaps"}`
+        : "Learning state updated",
+    });
   }
 
   private appendProposalBubble(edit: ProposedEdit): void {

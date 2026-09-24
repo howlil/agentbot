@@ -1,241 +1,147 @@
 # Forge Design System
 
-Forge is a native Obsidian AI workspace. Its interface should feel calm,
-precise, compact, technical, functional, and AI-native. It should look like a
-serious productivity tool, not a marketing surface.
+## Design contract
 
-This document is the source of truth for new and refactored UI. Preserve the
-existing Learning OS behavior and ownership boundaries while applying this
-visual and interaction language.
-
-## Design direction
-
-Use this order when shaping a component:
+Forge is a compact Learning OS control surface inside Obsidian.
 
 ```text
-structure → hierarchy → interaction → decoration
+user intent
+→ product state
+→ information responsibility
+→ correct UI primitive
+→ interaction
+→ visual treatment
 ```
 
-Hierarchy should come primarily from spacing, typography, surface contrast,
-hairline boundaries, and restrained elevation. Color is secondary. The UI
-should remain coherent when viewed almost entirely in grayscale.
+Target: calm, precise, compact, technical, functional, AI-native, and native
+beside Obsidian.
 
-### Forge exception
+Hierarchy: position → spacing → typography → surface → border → elevation →
+accent. Purple is semantic, not decorative.
 
-Keep Forge's existing purple accent. It is the Obsidian
-`--interactive-accent` token and is reserved for active AI state, intentional
-primary actions, focus, and selected context. Do not replace it with blue,
-rainbow, gradients, or decorative accent systems.
-
-## Interface graph
-
-The right-sidebar experience is one compact workspace:
+## Root graph
 
 ```text
-Forge sidebar
+Forge
 ├── Header
-│   ├── Forge identity
-│   ├── New session
-│   └── Compact mode actions / progressive command menu
 ├── Thread
-│   ├── Empty / context-ready slate
-│   ├── User request
-│   ├── Thinking trace
-│   ├── Streaming response
-│   ├── Rendered Markdown answer
-│   ├── Edit proposal + approval
-│   └── Recoverable error / stopped state
+│   ├── UserBubble
+│   ├── StatusTrace
+│   ├── PlainResponse
+│   ├── PracticeCard
+│   ├── PracticeEvaluation
+│   ├── ReviewFindingCard
+│   ├── ProposalCard
+│   └── ErrorRow
 └── Composer
-    ├── Context chips
-    ├── Attachments
-    ├── Prompt input
-    ├── Source and slash-command menus
-    ├── Model selector
-    ├── Dictation
-    └── Send / cancel
+    ├── IntentChip?
+    ├── AttachmentChip*
+    ├── PromptInput
+    └── AddContext / ContextSummary / Model / Dictation / Send
 ```
 
-### Primary moves and states
-
-| Move | Visible result | Required meaning |
-| --- | --- | --- |
-| Open sidebar | Empty, ready, or error slate | Readiness is explicit |
-| Resolve note or selection | Context chips | Agent-visible context is inspectable |
-| Choose mode | Selected mode tab | Mode changes the learning action |
-| Type `@` or `/` | Context or command menu | Advanced controls are progressively disclosed |
-| Attach a file | Attachment chip | Imported content is visible and removable |
-| Send | User bubble, thinking trace, running state | Work has started |
-| Stream response | Progressive text edge | Generation is in progress |
-| Complete response | Rendered Markdown + actions | Markdown is content, not raw syntax |
-| Receive edit proposal | Reviewable diff and Apply / Reject | Recommendation is not execution |
-| Apply | Applied state | Only approved, validated mutation changes notes |
-| Stop or fail | Recoverable status + composer | User can understand and retry |
-
-### Meaningful variants
-
-Design and verify these variants without changing the product's ownership:
+## Card decision
 
 ```text
-EMPTY · NO_CONTEXT · READY · THINKING · TOOL_RUNNING
-STREAMING · MARKDOWN_ANSWER · PROPOSAL · APPLIED
-ERROR · STOPPED · RUNTIME_UNAVAILABLE · STALE_EDIT
-menu-open · attachments-present · dictation-listening
-mobile/narrow-sidebar · keyboard-focus · reduced-motion
+owns state / lifecycle / action?
+├── no  → inline
+└── yes
+    ├── consequential → ApprovalCard
+    └── otherwise     → ContentCard
 ```
 
-### Interaction contract
+Normal AI explanation is PlainResponse, not a card.
 
-- Keep keyboard focus visible with a 2px purple outline and 2px offset.
-- `@` and `/` menus support ArrowUp/ArrowDown, Enter/Tab selection, and Escape.
-- Menus use one moving highlight, not a border around every row.
-- Send is disabled until there is prompt content or an attachment.
-- Cancel is available while work is running and returns the composer to a
-  recoverable state.
-- Status text uses `role="status"` or an equivalent accessible live region for
-  thinking, streaming, completion, and failure transitions.
-- Dictation communicates unsupported, listening, and resolved states without
-  requiring animation to understand them.
+## Intent
 
-## Semantic tokens
+Ask is implicit default.
 
-Components must use semantic Forge tokens rather than hard-coded colors. The
-tokens are scoped to `.forge-root` and map to Obsidian so light/dark themes keep
-their native hierarchy.
+Explain, Review, Edit are one-shot. Practice is persistent until the practice
+session completes or the user exits it.
 
-```css
---forge-page       /* application background */
---forge-canvas     /* thread/workspace background */
---forge-surface    /* primary working surface */
---forge-inset      /* lower-emphasis internal region */
---forge-hover      /* quiet hover surface */
---forge-hover-2    /* stronger hover surface */
---forge-ink        /* primary information */
---forge-ink-2      /* secondary information */
---forge-ink-3      /* metadata/supporting information */
---forge-line       /* default hairline */
---forge-line-strong /* focus and structural boundary */
---forge-line-soft  /* low-emphasis divider */
---forge-field      /* input field */
---forge-accent     /* existing purple interactive accent */
---forge-accent-ink /* readable accent foreground */
---forge-accent-tint /* subtle purple state background */
---forge-green      /* success */
---forge-orange     /* warning / needs review */
---forge-red        /* destructive / failure */
-```
+`/` chooses intent, creates an IntentChip, and removes command text from the
+actual prompt.
 
-Use neutral tokens for most content. Semantic colors need a foreground and a
-low-chroma tint. Never use saturated color as a large decorative panel.
-
-## Typography
-
-- Interface font: `var(--font-interface, Inter, ui-sans-serif, system-ui,
-  sans-serif)`.
-- Monospace: `var(--font-monospace, "JetBrains Mono", ui-monospace,
-  monospace)`.
-- Base text is 13–14px with approximately 1.5 line height and slight negative
-  tracking.
-- Common compact UI is 12–13px. Metadata is 10–11.5px.
-- Use 400, 500, and 600 weights. Prefer weight and spacing over oversized
-  headings.
-- Use monospace only for code, counters, timestamps, IDs, and technical
-  metadata.
-
-## Shape, spacing, and surfaces
-
-Use the following small, systematic scale:
+## Context
 
 ```text
-radius: 6px chip · 8px control · 10px card · 14px window · 999px pill
-spacing: 4px micro · 6px related · 8px compact · 10px bar · 12px card
-         16px grouping · 24px section · 32px major separation
-control: 28px icon/action target
+Primary  = selection or current note
+Explicit = @vault-note / attachment
+System   = learning policy / progress
 ```
 
-Prefer one continuous surface with separators and inset regions over nested
-cards. Every card must have a clear responsibility. Use crisp 1px borders and
-small layered shadows; menus may be raised, but avoid large soft SaaS shadows.
+The composer shows a compact summary such as `@index.md · selection +2`.
+Typing `@name` searches vault Markdown notes and adds real context.
 
-## Component rules
+## Visual system
 
-### Header and modes
+Use mostly neutral Obsidian-mapped tokens. Purple inherits
+`--interactive-accent` and means active AI intent, focus, selection, or a
+primary AI action.
 
-Keep the header compact. Identity and session actions remain visible without
-extra navigation. Mode selection may be exposed through compact empty-state
-actions or the progressive `/` command menu; do not add a second navigation bar
-just to expose modes. Purple is reserved for the active AI state.
+Green = correct/success/applied.
+Orange = partial/warning/review.
+Red = failure/destructive/incorrect.
 
-### Thread and messages
+Typography: 11 / 12 / 12.5 / 13 / 14 / exceptional 21px.
+Spacing: 4 / 6 / 8 / 10 / 12 / 16 / 24px.
+Radius: 6 chip / 8 control / 10 card / 14 composer-window / pill.
+Compact controls: 28px.
+Borders: crisp 1px.
+Shadows: tiny and structural.
 
-The thread is the canvas. User messages may use the purple accent as a compact
-intent marker; agent messages use a neutral surface. Thinking, running,
-proposal, applied, and failed states must not look interchangeable.
+## Thread rules
 
-### Composer
+UserBubble: compact purple tint, max ~84%, no broad shadow.
 
-The composer is a first-class workspace control:
+PlainResponse: transparent outer surface, no border, 13–14px rendered Markdown.
+
+StatusTrace: show real operational facts only. Default `Working · 2.4s`;
+completion `Completed in 2.4s`. Do not simulate tool execution with timers.
+
+PracticeCard: neutral card with small purple concept label and inset hint.
+
+PracticeEvaluation: green / orange / red by outcome. Purple never means
+correctness.
+
+ReviewFindingCard: one material gap per card. Finding kinds are misconception,
+missing relationship, factual error, and weak explanation. Actions: Practice,
+Fix.
+
+ProposalCard: proposed → Reject or Apply → applied/stale. Never style a proposal
+as already executed.
+
+## Composer
 
 ```text
-context / attachments
-prompt input
-+  model  dictation  send
+[Intent ×] [attachments...]
+
+Ask anything about this note...
+
++   @index.md · selection     Model ▾   mic   send
 ```
 
-It grows when text wraps, keeps controls at 28px, and opens menus relative to
-its own boundary. Source selection, slash commands, model selection, files,
-and dictation are extensions of one input system.
+Composer radius 14px, input 13px, controls 28px. Model is visually secondary.
 
-### Markdown responses
+## Motion
 
-Completed AI output must render Markdown rather than expose raw syntax. Keep
-headings compact, lists readable, code in an inset monospace surface, links
-underlined, and tables as one continuous bordered region. Streaming may show a
-temporary progressive edge, then settles into the rendered answer.
-
-### AI state and trust
-
-Use explicit operational copy such as `Reading context`, `Thinking`,
-`Generating response`, `Needs review`, and `Applied`. A recommendation or edit
-proposal is never styled as a completed mutation. Consequential actions require
-explicit Apply / Reject controls.
-
-## Motion and accessibility
-
-Motion should communicate state, hierarchy, spatial relationship, or progress.
-Use 100–150ms for feedback, 150–200ms for controls and menus, and 220–300ms
-for expansion. Prefer `cubic-bezier(0.23, 1, 0.32, 1)` and small
-`translateY(8px) → translateY(0)` entries.
-
-Respect `prefers-reduced-motion: reduce`: collapse transitions and animations to
-instant states. No state may depend on animation to be understood.
-
-Responsive behavior changes composition before visual language:
-
-```text
-desktop: side-by-side regions when available
-mobile/narrow sidebar: stacked content, same type/radius/token language
-```
+100–150ms feedback, 150–200ms menus/controls, 220–300ms expansion. Motion only
+communicates state or spatial relation. Respect reduced motion.
 
 ## Avoid
 
-- Purple gradients, glassmorphism, glowing borders, or rainbow status systems.
-- Giant shadows, oversized headings, oversized controls, or marketing hero
-  composition.
-- Cards inside cards without a responsibility boundary.
-- Decorative badges, arbitrary radius values, or permanent ambient animation.
-- Raw agent protocol, raw Markdown output, or hidden consequential actions.
+No purple gradients, glassmorphism, glowing borders, broad SaaS shadows,
+decorative nested cards, giant icons/headings, arbitrary radii, fake thinking
+stages, permanent animation, or hidden consequential actions.
 
-## Design acceptance test
+## Acceptance
 
-Before accepting a UI change, check:
-
-1. Can the primary information and next action be identified immediately?
-2. Does useful information occupy the available sidebar without feeling cramped?
-3. Does every non-neutral color communicate state, action, or focus?
-4. Does every container, border, radius, and shadow have a structural reason?
-5. Can the user distinguish thinking, running, proposed, completed, and failed?
-6. Do keyboard, reduced-motion, narrow-sidebar, and error variants remain clear?
-7. Does the component look native beside the existing Forge interface?
-
-The target feel is quiet, precise, sophisticated, technical, compact, and
-intentionally designed.
+1. Primary information and next action are obvious.
+2. Every card owns state/lifecycle/action.
+3. Every non-neutral color has meaning.
+4. Context is inspectable.
+5. Running/proposed/applied/failed/evaluation states are distinct.
+6. One-shot intents reset.
+7. Practice remains coherent across question → answer → evaluation.
+8. Keyboard and reduced motion remain usable.
+9. UI feels like Obsidian, not a generic AI dashboard.

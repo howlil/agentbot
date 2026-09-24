@@ -33,4 +33,41 @@ export class ObsidianContext {
     return { file: file.path, content };
   }
 
+  searchNotes(
+    query: string,
+    limit = 8,
+  ): Array<{ path: string; name: string }> {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return [];
+
+    return this.app.vault
+      .getMarkdownFiles()
+      .map((file) => ({
+        path: file.path,
+        name: file.basename,
+        score:
+          file.basename.toLowerCase().startsWith(normalized)
+            ? 0
+            : file.path.toLowerCase().includes(normalized)
+              ? 1
+              : 2,
+      }))
+      .filter((item) =>
+        item.name.toLowerCase().includes(normalized) ||
+        item.path.toLowerCase().includes(normalized),
+      )
+      .sort((a, b) => a.score - b.score || a.path.localeCompare(b.path))
+      .slice(0, limit)
+      .map(({ path, name }) => ({ path, name }));
+  }
+
+  async loadNote(path: string): Promise<{ file: string; content: string } | null> {
+    const file = this.app.vault.getFileByPath(path);
+    if (!file || !(file instanceof TFile)) return null;
+
+    return {
+      file: file.path,
+      content: await this.app.vault.cachedRead(file),
+    };
+  }
 }

@@ -5,6 +5,7 @@ import {
   PracticeEvaluation,
   PracticeQuestion,
 } from "./practice-types";
+import { ReviewFinding } from "./review-types";
 
 export type LearningActionKind =
   | "ask"
@@ -40,6 +41,10 @@ export type LearningEvent =
   | {
       type: "practice-evaluation";
       evaluation: PracticeEvaluation;
+    }
+  | {
+      type: "review-findings";
+      findings: ReviewFinding[];
     }
   | {
       type: "mutation-proposed";

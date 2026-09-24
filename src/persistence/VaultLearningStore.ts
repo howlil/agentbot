@@ -5,6 +5,7 @@ import {
   LearningState,
 } from "../learning/learning-state";
 import { PracticeEvaluation } from "../learning/practice-types";
+import { ReviewFinding } from "../learning/review-types";
 
 const ROOT = "00-learning-os";
 const PROGRESS_PATH = `${ROOT}/progress.json`;
@@ -23,7 +24,7 @@ function isLearningState(value: unknown): value is LearningState {
 
   return (
     obj.version === 1 &&
-    typeof obj.target === "string" &&
+    (obj.target === null || typeof obj.target === "string") &&
     Array.isArray(obj.gaps) &&
     Array.isArray(obj.evidence)
   );
@@ -135,6 +136,51 @@ export class VaultLearningStore {
           gap.status = "improving";
           gap.evidenceIds.push(evidence.id);
         }
+      }
+    }
+
+    await this.save(state);
+    return state;
+  }
+
+  async recordReviewFindings(input: {
+    findings: ReviewFinding[];
+    source: string;
+  }): Promise<LearningState> {
+    const state = await this.load();
+    if (input.findings.length === 0) return state;
+
+    for (const finding of input.findings) {
+      const evidence: LearningEvidence = {
+        id: crypto.randomUUID(),
+        type: "review",
+        concept: finding.concept,
+        source: input.source,
+        outcome: finding.kind,
+        createdAt: Date.now(),
+      };
+      state.evidence.push(evidence);
+      state.currentTopic = finding.concept;
+
+      const existing = state.gaps.find(
+        (gap) =>
+          normalize(gap.concept) === normalize(finding.concept) &&
+          normalize(gap.reason) === normalize(finding.detail),
+      );
+
+      if (existing) {
+        if (!existing.evidenceIds.includes(evidence.id)) {
+          existing.evidenceIds.push(evidence.id);
+        }
+        existing.status = "open";
+      } else {
+        state.gaps.push({
+          id: crypto.randomUUID(),
+          concept: finding.concept,
+          reason: finding.detail,
+          evidenceIds: [evidence.id],
+          status: "open",
+        });
       }
     }
 

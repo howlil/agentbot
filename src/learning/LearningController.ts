@@ -89,6 +89,17 @@ export class LearningController {
     return this.contexts.resolve(explicitContext);
   }
 
+  searchNotes(
+    query: string,
+    limit = 8,
+  ): Array<{ path: string; name: string }> {
+    return this.contexts.searchNotes(query, limit);
+  }
+
+  loadNoteContext(path: string): Promise<AgentContext | null> {
+    return this.contexts.loadExplicitNote(path);
+  }
+
   async *run(request: LearningRequest): AsyncIterable<LearningEvent> {
     if (this.activeTurn) {
       yield {
@@ -349,6 +360,31 @@ export class LearningController {
           type: "practice-question",
           question: event.question,
         };
+        continue;
+      }
+
+      if (event.type === "review-findings") {
+        const source =
+          context.resolved.selection?.file ??
+          context.resolved.activeNote?.path ??
+          "learning-session";
+
+        yield {
+          type: "review-findings",
+          findings: event.findings,
+        };
+
+        const state = await this.learningState.recordReviewFindings({
+          findings: event.findings,
+          source,
+        });
+
+        if (event.findings.length > 0) {
+          yield {
+            type: "learning-state-updated",
+            state,
+          };
+        }
         continue;
       }
 

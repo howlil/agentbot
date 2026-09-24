@@ -1670,3 +1670,148 @@
     width: 45%;
   }
 }
+
+
+/* ── Forge conversation + learning object system v1 ──────────────────────── */
+.forge-bubble--user {
+  max-width: 84%;
+  padding: 8px 10px;
+  border: 1px solid var(--forge-accent-border);
+  border-radius: var(--forge-radius-card);
+  background: var(--forge-accent-tint);
+  color: var(--forge-ink);
+  box-shadow: none;
+}
+.forge-bubble--agent {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.forge-response-meta { margin-bottom: 5px; color: var(--forge-ink-3); font-size: 11px; }
+.forge-response-label { color: var(--forge-ink); font-weight: 600; }
+.forge-response-time { color: var(--forge-ink-3); }
+
+.forge-intent-row { display: flex; align-items: center; gap: 6px; }
+.forge-intent-row.forge-hidden { display: none; }
+.forge-intent-chip {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 9px;
+  border: 1px solid var(--forge-accent-border);
+  border-radius: var(--forge-radius-pill);
+  background: var(--forge-accent-tint);
+  color: var(--forge-accent-ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+.forge-intent-remove {
+  display: inline-flex;
+  width: 18px; height: 18px;
+  align-items: center; justify-content: center;
+  padding: 0; border: 0;
+  border-radius: var(--forge-radius-pill);
+  background: transparent;
+  color: var(--forge-ink-2);
+  cursor: pointer;
+}
+.forge-intent-remove:hover,
+.forge-intent-remove:focus-visible { background: var(--forge-hover); color: var(--forge-ink); }
+
+.forge-prompt-menu-row:disabled { cursor: default; opacity: 0.72; }
+.forge-prompt-menu-row:disabled:hover { background: transparent; }
+.forge-context-select { max-width: min(52%, 210px); }
+.forge-composer-tools .forge-model-select { width: auto; max-width: 120px; }
+
+.forge-thinking-panel {
+  transition: grid-template-rows 220ms cubic-bezier(0.23,1,0.32,1), opacity 160ms ease;
+}
+.forge-thinking-trace--facts::before { display: none; }
+.forge-thinking-trace--facts { gap: 2px; margin-left: 20px; padding-left: 0; }
+.forge-thinking-trace--facts .forge-thinking-row {
+  min-height: 24px;
+  padding: 1px 4px;
+  animation: none;
+  background: transparent;
+}
+
+.forge-practice-card,
+.forge-practice-evaluation,
+.forge-review-card {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--forge-line);
+  border-radius: var(--forge-radius-card);
+  background: var(--forge-surface);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.035);
+}
+.forge-practice-card { border-color: var(--forge-line-strong); }
+.forge-practice-hint {
+  padding: 7px 8px;
+  border-radius: var(--forge-radius-control);
+  background: var(--forge-inset);
+  font-style: normal;
+}
+.forge-practice-evaluation.forge-outcome--correct .forge-practice-label { color: var(--forge-green); }
+.forge-practice-evaluation.forge-outcome--partial .forge-practice-label { color: var(--forge-orange); }
+.forge-practice-evaluation.forge-outcome--incorrect .forge-practice-label { color: var(--forge-red); }
+
+.forge-review { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.forge-review-summary { color: var(--forge-ink-2); font-size: 12px; font-weight: 500; }
+.forge-review-card { margin-top: 0; }
+.forge-review-kind {
+  color: var(--forge-orange);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.forge-review-card--factual-error .forge-review-kind,
+.forge-review-card--misconception .forge-review-kind { color: var(--forge-red); }
+.forge-review-title { margin-top: 5px; color: var(--forge-ink); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.forge-review-detail { margin-top: 4px; color: var(--forge-ink-2); font-size: 12px; line-height: 1.5; }
+.forge-review-actions { display: flex; gap: 5px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--forge-line); }
+.forge-review-action {
+  min-height: 27px;
+  padding: 3px 9px;
+  border: 1px solid var(--forge-line);
+  border-radius: var(--forge-radius-pill);
+  background: transparent;
+  color: var(--forge-ink-2);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+.forge-review-action:hover,
+.forge-review-action:focus-visible {
+  border-color: var(--forge-accent-border);
+  background: var(--forge-accent-tint);
+  color: var(--forge-ink);
+}
+
+.forge-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  color: var(--forge-ink-3);
+  font-size: 11px;
+}
+.forge-progress-mark { color: var(--forge-green); }
+
+.forge-proposal { box-shadow: 0 1px 2px rgba(0,0,0,0.035); }
+.forge-proposal-badge { background: var(--forge-surface); }
+.forge-proposal-reason { background: var(--forge-inset); font-style: normal; }
+.forge-btn-apply,
+.forge-btn-reject { min-height: 28px; border-radius: var(--forge-radius-pill); }
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-thinking-label--active,
+  .forge-stream-word,
+  .forge-bubble--streaming::after { animation: none !important; }
+}

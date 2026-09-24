@@ -4,15 +4,17 @@ import {
   PracticePayload,
   PracticeQuestion,
 } from "./practice-types";
+import { ReviewFinding, ReviewPayload } from "./review-types";
 
 export type StructuredStreamEvent =
   | { type: "text"; text: string }
   | { type: "proposal"; proposal: EditProposal }
   | { type: "practice-question"; question: PracticeQuestion }
   | { type: "practice-evaluation"; evaluation: PracticeEvaluation }
+  | { type: "review-findings"; findings: ReviewFinding[] }
   | { type: "error"; message: string };
 
-type BlockKind = "edit-proposal" | "learning-practice";
+type BlockKind = "edit-proposal" | "learning-practice" | "learning-review";
 
 const START_TAGS: Array<{
   kind: BlockKind;
@@ -20,6 +22,7 @@ const START_TAGS: Array<{
 }> = [
   { kind: "edit-proposal", marker: "```edit-proposal" },
   { kind: "learning-practice", marker: "```learning-practice" },
+  { kind: "learning-review", marker: "```learning-review" },
 ];
 
 const END_TAG = "\n```";
@@ -66,6 +69,26 @@ function isPracticePayload(value: unknown): value is PracticePayload {
   }
 
   return false;
+}
+
+function isReviewPayload(value: unknown): value is ReviewPayload {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  if (obj.kind !== "review" || !Array.isArray(obj.findings)) return false;
+
+  return obj.findings.every((item) => {
+    if (!item || typeof item !== "object") return false;
+    const finding = item as Record<string, unknown>;
+    return (
+      (finding.kind === "misconception" ||
+        finding.kind === "missing-relation" ||
+        finding.kind === "factual-error" ||
+        finding.kind === "weak-explanation") &&
+      typeof finding.concept === "string" &&
+      typeof finding.title === "string" &&
+      typeof finding.detail === "string"
+    );
+  });
 }
 
 function findStart(buffer: string):
@@ -198,6 +221,22 @@ export class StructuredStreamParser {
         events.push({
           type: "proposal",
           proposal: parsed,
+        });
+        continue;
+      }
+
+      if (blockKind === "learning-review") {
+        if (!isReviewPayload(parsed)) {
+          events.push({
+            type: "error",
+            message: "Agent returned an invalid review payload.",
+          });
+          continue;
+        }
+
+        events.push({
+          type: "review-findings",
+          findings: parsed.findings,
         });
         continue;
       }
