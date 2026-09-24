@@ -10,13 +10,16 @@ import {
   LearningActionKind,
   LearningEvent,
 } from "../learning/learning-types";
-import { LearningContext } from "../context/context-types";
+import {
+  ExplicitContextRef,
+  LearningContext,
+} from "../context/context-types";
 import {
   PracticeEvaluation,
   PracticeQuestion,
 } from "../learning/practice-types";
 import { ReviewFinding } from "../learning/review-types";
-import { AgentContext, ChatMessage, EditProposal } from "../types";
+import { ChatMessage, EditProposal } from "../types";
 import { ProposedEdit } from "../learning/learning-types";
 
 export const FORGE_VIEW_TYPE = "forge-sidebar";
@@ -109,7 +112,10 @@ export class ChatView extends ItemView {
   private promptMenuActive = 0;
   private promptMenuRows: HTMLButtonElement[] = [];
   private promptMenuRequest = 0;
-  private attachments: Array<{ name: string; context: AgentContext }> = [];
+  private attachments: Array<{
+    name: string;
+    ref: ExplicitContextRef;
+  }> = [];
 
   private agentCursorEl: HTMLElement | null = null;
   private agentContentEl: HTMLElement | null = null;
@@ -135,7 +141,7 @@ export class ChatView extends ItemView {
   private actionButtons = new Map<LearningActionKind, HTMLButtonElement>();
   private systemContextFiles: string[] = [];
 
-  private extraCtx: AgentContext[] = [];
+  private extraCtx: ExplicitContextRef[] = [];
   private currentContext: LearningContext | null = null;
 
   constructor(
@@ -471,7 +477,7 @@ export class ChatView extends ItemView {
       setForgeIcon(remove, "x");
       remove.addEventListener("click", () => {
         this.attachments.splice(index, 1);
-        this.extraCtx = this.attachments.map((item) => item.context);
+        this.extraCtx = this.attachments.map((item) => item.ref);
         this.renderAttachments();
         void this.syncChips();
       });
@@ -487,15 +493,15 @@ export class ChatView extends ItemView {
       const content = await file.text();
       this.attachments.push({
         name: file.name,
-        context: {
-          type: "note",
-          file: `attachment/${file.name}`,
+        ref: {
+          kind: "attachment",
+          name: file.name,
           content,
         },
       });
     }
 
-    this.extraCtx = this.attachments.map((item) => item.context);
+    this.extraCtx = this.attachments.map((item) => item.ref);
     this.renderAttachments();
     this.fileInput.value = "";
     await this.syncChips();
@@ -542,7 +548,14 @@ export class ChatView extends ItemView {
       const excluded = new Set([
         this.currentContext?.activeNote?.path,
         this.currentContext?.selection?.file,
-        ...this.extraCtx.map((item) => item.file),
+        ...this.extraCtx
+          .filter(
+            (item): item is Extract<
+              ExplicitContextRef,
+              { kind: "vault-note" }
+            > => item.kind === "vault-note",
+          )
+          .map((item) => item.path),
       ].filter((value): value is string => Boolean(value)));
 
       for (const note of this.learning.searchNotes(query, 6)) {
@@ -635,7 +648,7 @@ export class ChatView extends ItemView {
           name: context.file.split("/").pop() ?? context.file,
           context,
         });
-        this.extraCtx = this.attachments.map((item) => item.context);
+        this.extraCtx = this.attachments.map((item) => item.ref);
         this.renderAttachments();
         await this.syncChips();
       }
