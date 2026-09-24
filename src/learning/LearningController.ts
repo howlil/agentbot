@@ -7,45 +7,75 @@ import {
   ChatSession,
   EditProposal,
 } from "../types";
-import { ContextResolver } from "../context/ContextResolver";
+import type { ContextResolver } from "../context/ContextResolver";
 import {
   ExplicitContextRef,
   LearningContext,
   TurnContextSnapshot,
 } from "../context/context-types";
-import { PolicyLoader } from "../context/PolicyLoader";
-import { MutationService } from "../mutation/MutationService";
-import { VaultLearningStore } from "../persistence/VaultLearningStore";
-import { SessionController } from "../session/SessionController";
+import type { PolicyLoader } from "../context/PolicyLoader";
+import type { MutationService } from "../mutation/MutationService";
+import type { VaultLearningStore } from "../persistence/VaultLearningStore";
+import type { SessionController } from "../session/SessionController";
 import {
   buildActionInstruction,
   buildPracticeEvaluationInstruction,
   buildPracticeQuestionInstruction,
 } from "./action-builders";
+import { toPromptLearningState } from "./learning-state-projection";
 import {
   LearningEvent,
   LearningRequest,
   ProposedEdit,
 } from "./learning-types";
+import { PracticeQuestion } from "./practice-types";
 import {
-  PracticeEvaluation,
-  PracticeQuestion,
-  PracticeSession,
-} from "./practice-types";
+  PracticeEvaluationAttempt,
+  PracticeStateMachine,
+} from "./PracticeStateMachine";
 import {
   StructuredStreamEvent,
   StructuredStreamParser,
 } from "./StructuredStreamParser";
+
+type SessionPort = Pick<
+  SessionController,
+  | "checkRuntime"
+  | "getSession"
+  | "getModels"
+  | "setModel"
+  | "newSession"
+  | "sendTurn"
+  | "recordAssistantMessage"
+  | "recordProposal"
+  | "updateProposalState"
+>;
+
+type ContextPort = Pick<
+  ContextResolver,
+  "resolve" | "searchNotes" | "toAgentContext"
+>;
+
+type PolicyPort = Pick<PolicyLoader, "load">;
+type MutationPort = Pick<MutationService, "apply">;
+type LearningStatePort = Pick<
+  VaultLearningStore,
+  "load" | "recordPracticeEvaluation" | "recordReviewFindings"
+>;
+
+export interface LearningControllerOptions {
+  turnTimeoutMs?: number;
+}
 
 /**
  * Application boundary for the Learning OS.
  *
  * The view sends user intent here. This controller owns orchestration:
  * context -> policy -> learning state -> action -> agent session -> normalized
- * UI events. It deliberately hides provider transport details from the UI.
+ * UI events. Provider transport stays behind SessionController/AgentAdapter.
  */
 export class LearningController {
-  private practiceSession: PracticeSession | null = null;
+  private readonly practice = new PracticeStateMachine();
   private activeTurn: {
     controller: AbortController;
     cancelReason?: "user" | "timeout" | "dispose";
@@ -54,14 +84,18 @@ export class LearningController {
     string,
     { proposal: EditProposal; mutableFile?: string }
   >();
+  private readonly turnTimeoutMs: number;
 
   constructor(
-    private readonly sessions: SessionController,
-    private readonly contexts: ContextResolver,
-    private readonly policies: PolicyLoader,
-    private readonly mutations: MutationService,
-    private readonly learningState: VaultLearningStore,
-  ) {}
+    private readonly sessions: SessionPort,
+    private readonly contexts: ContextPort,
+    private readonly policies: PolicyPort,
+    private readonly mutations: MutationPort,
+    private readonly learningState: LearningStatePort,
+    options: LearningControllerOptions = {},
+  ) {
+    this.turnTimeoutMs = options.turnTimeoutMs ?? 60_000;
+  }
 
   checkRuntime(): Promise<AgentHealth> {
     return this.sessions.checkRuntime();
@@ -80,7 +114,8 @@ export class LearningController {
   }
 
   async newSession(): Promise<ChatSession> {
-    this.practiceSession = null;
+    this.practice.reset();
+    this.pendingProposals.clear();
     return this.sessions.newSession();
   }
 
@@ -97,28 +132,55 @@ export class LearningController {
     return this.contexts.searchNotes(query, limit);
   }
 
-
-  async *run(request: LearningRequest): AsyncIterable<LearningEvent> {
+  async *run(
+    request: LearningRequest,
+  ): AsyncIterable<LearningEvent> {
     if (this.activeTurn) {
       yield {
         type: "failed",
-        failure: { code: "busy", message: "Another Nox turn is still running." },
+        failure: {
+          code: "busy",
+          message: "Another Nox turn is still running.",
+        },
       };
       return;
     }
 
-    const context = await this.contexts.resolve(request.explicitContext);
-    const [policy, state] = await Promise.all([
-      this.policies.load(),
-      this.learningState.load(),
-    ]);
+    let context: LearningContext;
+    let policy: Awaited<ReturnType<PolicyPort["load"]>>;
+    let state: Awaited<ReturnType<LearningStatePort["load"]>>;
+
+    try {
+      context = await this.contexts.resolve(
+        request.explicitContext,
+      );
+      [policy, state] = await Promise.all([
+        this.policies.load(),
+        this.learningState.load(),
+      ]);
+    } catch (error) {
+      yield {
+        type: "failed",
+        failure: {
+          code: "unknown",
+          message: "Nox could not prepare this learning turn.",
+          diagnostic:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        },
+      };
+      return;
+    }
 
     const visible = this.contexts.toAgentContext(context);
     const system: AgentContext[] = [];
 
     if (policy.rawInstructions) {
       const alreadyIncluded = visible.some(
-        (item) => item.type === "note" && item.file === policy.path,
+        (item) =>
+          item.type === "note" &&
+          item.file === policy.path,
       );
 
       if (!alreadyIncluded) {
@@ -133,13 +195,20 @@ export class LearningController {
     system.push({
       type: "note",
       file: "00-learning-os/progress.json",
-      content: JSON.stringify(state, null, 2),
+      content: JSON.stringify(
+        toPromptLearningState(state),
+        null,
+        2,
+      ),
     });
 
     const readableFiles = Array.from(
       new Set(
         visible
-          .filter((item) => !item.file.startsWith("attachment/"))
+          .filter(
+            (item) =>
+              !item.file.startsWith("attachment/"),
+          )
           .map((item) => item.file),
       ),
     );
@@ -155,37 +224,49 @@ export class LearningController {
       readableFiles,
       mutableFile,
     };
+
     yield { type: "context-ready", context: snapshot };
 
     let preparedPrompt: string;
+    let practiceAttempt:
+      | PracticeEvaluationAttempt
+      | undefined;
 
     if (request.action === "practice") {
-      const activePractice = this.practiceSession;
+      if (this.practice.isWaitingForAnswer()) {
+        const attempt =
+          this.practice.beginEvaluation(request.prompt);
 
-      if (
-        activePractice?.state === "waiting-answer" &&
-        activePractice.currentQuestion
-      ) {
-        activePractice.state = "evaluating";
-        preparedPrompt = buildPracticeEvaluationInstruction({
-          question: activePractice.currentQuestion,
-          answer: request.prompt,
-          concept: activePractice.concept,
-        });
+        if (!attempt) {
+          yield {
+            type: "failed",
+            failure: {
+              code: "unknown",
+              message:
+                "The active practice question is no longer available.",
+            },
+          };
+          return;
+        }
+
+        practiceAttempt = attempt;
+        preparedPrompt =
+          buildPracticeEvaluationInstruction({
+            question: attempt.question,
+            answer: attempt.answer,
+            concept: attempt.concept,
+          });
       } else {
-        this.practiceSession = {
-          id: crypto.randomUUID(),
-          state: "generating",
-          turns: [],
-        };
-
-        preparedPrompt = buildPracticeQuestionInstruction(
-          request.prompt,
-        );
+        this.practice.start();
+        preparedPrompt =
+          buildPracticeQuestionInstruction(
+            request.prompt,
+          );
       }
     } else {
-      this.practiceSession = null;
-      const instruction = buildActionInstruction(request.action);
+      this.practice.reset();
+      const instruction =
+        buildActionInstruction(request.action);
       preparedPrompt =
         `${instruction}\n\nUser request:\n${request.prompt}`;
     }
@@ -197,11 +278,21 @@ export class LearningController {
       cancelReason?: "user" | "timeout" | "dispose";
     };
     this.activeTurn = activeTurn;
+
     const timeout = setTimeout(() => {
       activeTurn.cancelReason = "timeout";
       controller.abort();
-    }, 60_000);
+    }, this.turnTimeoutMs);
+
     let visibleText = "";
+
+    const rollbackPractice = () => {
+      if (practiceAttempt) {
+        this.practice.rollbackEvaluation(
+          practiceAttempt,
+        );
+      }
+    };
 
     try {
       for await (const event of this.sessions.sendTurn(
@@ -215,16 +306,23 @@ export class LearningController {
             parser.push(event.content),
             request,
             snapshot,
+            practiceAttempt,
           )) {
-            if (mapped.type === "response-delta") visibleText += mapped.text;
+            if (mapped.type === "response-delta") {
+              visibleText += mapped.text;
+            }
+
             if (mapped.type === "mutation-proposed") {
-              await this.sessions.recordAssistantMessage(visibleText);
+              await this.sessions.recordAssistantMessage(
+                visibleText,
+              );
               visibleText = "";
               await this.sessions.recordProposal(
                 mapped.edit.id,
                 mapped.edit.proposal,
               );
             }
+
             yield mapped;
           }
           continue;
@@ -235,34 +333,65 @@ export class LearningController {
             parser.finish(),
             request,
             snapshot,
+            practiceAttempt,
           )) {
-            if (mapped.type === "response-delta") visibleText += mapped.text;
+            if (mapped.type === "response-delta") {
+              visibleText += mapped.text;
+            }
+
             if (mapped.type === "mutation-proposed") {
-              await this.sessions.recordAssistantMessage(visibleText);
+              await this.sessions.recordAssistantMessage(
+                visibleText,
+              );
               visibleText = "";
               await this.sessions.recordProposal(
                 mapped.edit.id,
                 mapped.edit.proposal,
               );
             }
+
             yield mapped;
           }
-          await this.sessions.recordAssistantMessage(visibleText);
+
+          if (
+            practiceAttempt &&
+            this.practice.snapshot()?.state ===
+              "evaluating"
+          ) {
+            throw new Error(
+              "Agent completed without a practice evaluation.",
+            );
+          }
+
+          await this.sessions.recordAssistantMessage(
+            visibleText,
+          );
           yield { type: "completed" };
           return;
         }
 
         if (event.type === "failed") {
-          yield { type: "failed", failure: event.failure };
+          rollbackPractice();
+          yield {
+            type: "failed",
+            failure: event.failure,
+          };
           return;
         }
 
+        rollbackPractice();
+
         if (activeTurn.cancelReason === "timeout") {
+          const seconds = Math.max(
+            1,
+            Math.ceil(this.turnTimeoutMs / 1000),
+          );
           yield {
             type: "failed",
             failure: {
               code: "timeout",
-              message: "No response after 60 seconds. The agent runtime may be busy.",
+              message:
+                `No response after ${seconds} seconds. The agent runtime may be busy.`,
             },
           };
         } else {
@@ -270,26 +399,44 @@ export class LearningController {
         }
         return;
       }
+
+      if (practiceAttempt) {
+        rollbackPractice();
+      }
     } catch (error) {
+      rollbackPractice();
+
       const failure: AgentFailure = {
         code: "protocol-invalid",
-        message: "Nox could not interpret the agent response.",
-        diagnostic: error instanceof Error ? error.message : String(error),
+        message:
+          "Nox could not interpret the agent response.",
+        diagnostic:
+          error instanceof Error
+            ? error.message
+            : String(error),
       };
+
       yield { type: "failed", failure };
     } finally {
       clearTimeout(timeout);
-      if (this.activeTurn === activeTurn) this.activeTurn = null;
+      if (this.activeTurn === activeTurn) {
+        this.activeTurn = null;
+      }
     }
   }
 
-  async applyProposal(proposalId: string): Promise<ApplyResult> {
-    const pending = this.pendingProposals.get(proposalId);
+  async applyProposal(
+    proposalId: string,
+  ): Promise<ApplyResult> {
+    const pending =
+      this.pendingProposals.get(proposalId);
+
     if (!pending) {
       return {
         ok: false,
         reason: "stale",
-        message: "This proposal is no longer active. Regenerate the edit.",
+        message:
+          "This proposal is no longer active. Regenerate the edit.",
       };
     }
 
@@ -297,17 +444,25 @@ export class LearningController {
       pending.proposal,
       pending.mutableFile,
     );
+
     this.pendingProposals.delete(proposalId);
+
     await this.sessions.updateProposalState(
       proposalId,
       result.ok ? "applied" : "stale",
     );
+
     return result;
   }
 
-  async rejectProposal(proposalId: string): Promise<void> {
+  async rejectProposal(
+    proposalId: string,
+  ): Promise<void> {
     this.pendingProposals.delete(proposalId);
-    await this.sessions.updateProposalState(proposalId, "rejected");
+    await this.sessions.updateProposalState(
+      proposalId,
+      "rejected",
+    );
   }
 
   cancel(): void {
@@ -326,6 +481,7 @@ export class LearningController {
     events: StructuredStreamEvent[],
     request: LearningRequest,
     context: TurnContextSnapshot,
+    practiceAttempt?: PracticeEvaluationAttempt,
   ): AsyncIterable<LearningEvent> {
     for (const event of events) {
       if (event.type === "text") {
@@ -341,7 +497,8 @@ export class LearningController {
       if (event.type === "proposal") {
         if (
           !context.mutableFile ||
-          event.proposal.file !== context.mutableFile
+          event.proposal.file !==
+            context.mutableFile
         ) {
           throw new Error(
             `Edit target is not the active mutable note: ${event.proposal.file}`,
@@ -352,10 +509,12 @@ export class LearningController {
           id: crypto.randomUUID(),
           proposal: event.proposal,
         };
+
         this.pendingProposals.set(edit.id, {
           proposal: edit.proposal,
           mutableFile: context.mutableFile,
         });
+
         yield {
           type: "mutation-proposed",
           edit,
@@ -364,7 +523,10 @@ export class LearningController {
       }
 
       if (event.type === "practice-question") {
-        this.acceptPracticeQuestion(event.question);
+        this.practice.acceptQuestion(
+          event.question,
+        );
+
         yield {
           type: "practice-question",
           question: event.question,
@@ -383,30 +545,39 @@ export class LearningController {
           findings: event.findings,
         };
 
-        const state = await this.learningState.recordReviewFindings({
-          findings: event.findings,
-          source,
-        });
+        const nextState =
+          await this.learningState.recordReviewFindings(
+            {
+              findings: event.findings,
+              source,
+            },
+          );
 
         if (event.findings.length > 0) {
           yield {
             type: "learning-state-updated",
-            state,
+            state: nextState,
           };
         }
         continue;
       }
 
       if (event.type === "practice-evaluation") {
-        const evaluation = event.evaluation;
-        this.acceptPracticeEvaluation(
-          evaluation,
-          request.prompt,
-        );
+        if (!practiceAttempt) {
+          throw new Error(
+            "Practice evaluation arrived without an active answer attempt.",
+          );
+        }
+
+        const nextQuestion =
+          this.practice.commitEvaluation(
+            practiceAttempt,
+            event.evaluation,
+          );
 
         yield {
           type: "practice-evaluation",
-          evaluation,
+          evaluation: event.evaluation,
         };
 
         const source =
@@ -414,28 +585,23 @@ export class LearningController {
           context.resolved.activeNote?.path ??
           "learning-session";
 
-        const state =
-          await this.learningState.recordPracticeEvaluation({
-            evaluation,
-            source,
-          });
+        const nextState =
+          await this.learningState.recordPracticeEvaluation(
+            {
+              evaluation: event.evaluation,
+              source,
+            },
+          );
 
         yield {
           type: "learning-state-updated",
-          state,
+          state: nextState,
         };
 
-        if (evaluation.nextQuestion?.trim()) {
-          const next: PracticeQuestion = {
-            kind: "question",
-            concept: evaluation.concept,
-            question: evaluation.nextQuestion.trim(),
-          };
-
-          this.acceptPracticeQuestion(next);
+        if (nextQuestion) {
           yield {
             type: "practice-question",
-            question: next,
+            question: nextQuestion,
           };
         }
 
@@ -443,69 +609,6 @@ export class LearningController {
       }
 
       throw new Error(event.message);
-    }
-  }
-
-  private acceptPracticeQuestion(
-    question: PracticeQuestion,
-  ): void {
-    if (!this.practiceSession) {
-      this.practiceSession = {
-        id: crypto.randomUUID(),
-        state: "generating",
-        turns: [],
-      };
-    }
-
-    this.practiceSession.concept = question.concept;
-    this.practiceSession.currentQuestion = question.question;
-    this.practiceSession.state = "waiting-answer";
-
-    const current =
-      this.practiceSession.turns[
-        this.practiceSession.turns.length - 1
-      ];
-
-    if (
-      current &&
-      !current.answer &&
-      current.question === question.question
-    ) {
-      return;
-    }
-
-    this.practiceSession.turns.push({
-      id: crypto.randomUUID(),
-      concept: question.concept,
-      question: question.question,
-    });
-  }
-
-  private acceptPracticeEvaluation(
-    evaluation: PracticeEvaluation,
-    answer: string,
-  ): void {
-    if (!this.practiceSession) return;
-
-    const current =
-      this.practiceSession.turns[
-        this.practiceSession.turns.length - 1
-      ];
-
-    if (current) {
-      current.answer = answer;
-      current.evaluation = evaluation;
-    }
-
-    this.practiceSession.concept = evaluation.concept;
-
-    if (evaluation.nextQuestion?.trim()) {
-      this.practiceSession.state = "waiting-answer";
-      this.practiceSession.currentQuestion =
-        evaluation.nextQuestion.trim();
-    } else {
-      this.practiceSession.state = "complete";
-      this.practiceSession.currentQuestion = undefined;
     }
   }
 }
