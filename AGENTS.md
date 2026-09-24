@@ -44,6 +44,7 @@ explicit request.
 | `public/nox.png` | Canonical Nox brand asset used by product surfaces |
 | `styles.css` | Tailwind v4 CSS entry with theme-aware Nox styles |
 | `DESIGN.md` | Nox interface graph, semantic tokens, and design acceptance gates |
+| `.agents/testing.md` | Risk-based test topology, module proofs, and real-Obsidian smoke gate |
 | `dist/` | Generated build artifacts; never edit directly |
 | `scripts/deploy.mjs` | Copies `dist/` into an Obsidian vault |
 
@@ -103,8 +104,8 @@ git diff --stat
 git diff
 ```
 
-Read the relevant source, nearby types, product contract, and existing tests
-before editing. Check the current plugin identity and build path when a change
+Read the relevant source, nearby types, product contract, `.agents/testing.md`,
+and existing tests before editing. Check the current plugin identity and build path when a change
 touches packaging or deployment.
 
 ### Classify
