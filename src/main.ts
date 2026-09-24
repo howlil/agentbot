@@ -6,6 +6,7 @@ import { ObsidianContext } from "./context/ObsidianContext";
 import { PolicyLoader } from "./context/PolicyLoader";
 import { LearningController } from "./learning/LearningController";
 import { MutationService } from "./mutation/MutationService";
+import { VaultLearningStore } from "./persistence/VaultLearningStore";
 import { SessionController } from "./session/SessionController";
 import { SessionStore } from "./session/SessionStore";
 
@@ -40,12 +41,14 @@ export default class AgyPlugin extends Plugin {
     const contexts = new ContextResolver(obsidianContext);
     const policies = new PolicyLoader(this.app);
     const mutations = new MutationService(this.app);
+    const learningState = new VaultLearningStore(this.app);
 
     this.learning = new LearningController(
       sessions,
       contexts,
       policies,
       mutations,
+      learningState,
     );
 
     this.registerView(
