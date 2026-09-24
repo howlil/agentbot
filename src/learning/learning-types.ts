@@ -1,5 +1,8 @@
-import { AgentContext, AgentFailure, EditProposal } from "../types";
-import { TurnContextSnapshot } from "../context/context-types";
+import { AgentFailure, EditProposal } from "../types";
+import {
+  ExplicitContextRef,
+  TurnContextSnapshot,
+} from "../context/context-types";
 import { LearningState } from "./learning-state";
 import {
   PracticeEvaluation,
@@ -17,7 +20,7 @@ export type LearningActionKind =
 export interface LearningRequest {
   prompt: string;
   action: LearningActionKind;
-  explicitContext: AgentContext[];
+  explicitContext: ExplicitContextRef[];
 }
 
 export interface ProposedEdit {
