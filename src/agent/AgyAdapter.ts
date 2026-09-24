@@ -13,6 +13,11 @@ import {
   AgentRuntimeConfig,
   SendOptions,
 } from "../types";
+import {
+  AgyProtocolState,
+  encodeAgyUserMessage,
+  parseAgyLine,
+} from "./AgyProtocol";
 
 function escapeAttribute(value: string): string {
   return value
@@ -22,26 +27,21 @@ function escapeAttribute(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-// AGY print-mode protocol used by this adapter:
+// AGY headless protocol used by this adapter:
 //
-//   agy --print <prompt> --output-format stream-json [--model <id>]
-//       [--conversation <id>]
+//   agy --input-format stream-json --output-format stream-json
+//       [--model <id>] [--conversation <id>]
 //
-// stdout is NDJSON:
-//   {"event":"init", ...}
-//   {"event":"step_update","step_update":{"step_type":"agent_response","text_delta":"..."}}
-//   {"event":"result","result":{"status":"SUCCESS|ERROR|...","response":"...","error":"..."}}
-//
-// Each send() starts one print-mode process. Conversation continuity is restored
-// with --conversation <id>. The UI only sees normalized AgentStreamEvent values.
+// Prompts are written to stdin as one JSON user event per line. This keeps
+// note/context payloads out of OS argv and avoids command-line size limits.
+// Each send() still owns one process so cancellation and conversation
+// persistence remain simple at the Forge boundary.
 
 export class AgyAdapter implements AgentAdapter {
   constructor(
     private readonly cwd?: string,
     private readonly getConfig: () => AgentRuntimeConfig = () => ({}),
   ) {}
-
-  // ── binary resolution ─────────────────────────────────────────────────────
 
   async check(): Promise<AgentHealth> {
     try {
@@ -60,9 +60,13 @@ export class AgyAdapter implements AgentAdapter {
     const configured =
       this.getConfig().executablePath?.trim() ||
       process.env.AGY_PATH?.trim();
+
     if (configured && !existsSync(configured)) {
-      throw new Error(`Configured agent executable does not exist: ${configured}`);
+      throw new Error(
+        `Configured agent executable does not exist: ${configured}`,
+      );
     }
+
     const candidates = [
       configured,
       ...(process.platform === "win32"
@@ -71,7 +75,12 @@ export class AgyAdapter implements AgentAdapter {
               ? join(process.env.LOCALAPPDATA, "agy", "bin", "agy.exe")
               : undefined,
             process.env.ProgramFiles
-              ? join(process.env.ProgramFiles, "Google", "antigravity-cli", "agy.exe")
+              ? join(
+                  process.env.ProgramFiles,
+                  "Google",
+                  "antigravity-cli",
+                  "agy.exe",
+                )
               : undefined,
           ]
         : [join(homedir(), ".local", "bin", "agy")]),
@@ -83,7 +92,7 @@ export class AgyAdapter implements AgentAdapter {
 
     return new Promise((resolve, reject) => {
       const locator = process.platform === "win32" ? "where" : "which";
-      const p = spawn(locator, ["agy"]);
+      const process = spawn(locator, ["agy"]);
       let out = "";
       let settled = false;
 
@@ -97,21 +106,23 @@ export class AgyAdapter implements AgentAdapter {
         );
       };
 
-      p.stdout?.on("data", (d: Buffer) => (out += d.toString()));
-      p.on("error", fail);
-      p.on("close", (code) => {
+      process.stdout?.on("data", (data: Buffer) => {
+        out += data.toString();
+      });
+      process.on("error", fail);
+      process.on("close", (code) => {
         if (settled) return;
+
         if (code === 0 && out.trim()) {
           settled = true;
           resolve(out.trim().split(/\r?\n/)[0]);
           return;
         }
+
         fail();
       });
     });
   }
-
-  // ── send ──────────────────────────────────────────────────────────────────
 
   async *send(
     input: AgentInput,
@@ -133,21 +144,35 @@ export class AgyAdapter implements AgentAdapter {
       };
       return;
     }
-    const fullPrompt = this.buildFullPrompt(input);
-    const args = this.buildArgs(fullPrompt, opts);
 
-    const proc = spawn(bin, args, {
+    const proc = spawn(bin, this.buildArgs(opts), {
       cwd: this.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
 
     const abort = () => {
-      if (proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
+      if (proc.exitCode === null && !proc.killed) {
+        proc.kill("SIGTERM");
+      }
     };
     signal.addEventListener("abort", abort, { once: true });
 
     try {
+      if (!proc.stdin) {
+        yield {
+          type: "failed",
+          failure: this.failureFrom(
+            "AGY stdin is unavailable.",
+            "process-failed",
+          ),
+        };
+        return;
+      }
+
+      const fullPrompt = this.buildFullPrompt(input);
+      proc.stdin.end(encodeAgyUserMessage(fullPrompt));
+
       yield* this.readEvents(proc, signal);
     } finally {
       signal.removeEventListener("abort", abort);
@@ -155,10 +180,10 @@ export class AgyAdapter implements AgentAdapter {
     }
   }
 
-  private buildArgs(prompt: string, opts: SendOptions): string[] {
+  private buildArgs(opts: SendOptions): string[] {
     const args = [
-      "--print",
-      prompt,
+      "--input-format",
+      "stream-json",
       "--output-format",
       "stream-json",
     ];
@@ -166,17 +191,17 @@ export class AgyAdapter implements AgentAdapter {
     if (opts.model) {
       args.push("--model", opts.model);
     }
+
     if (opts.conversationId) {
       args.push("--conversation", opts.conversationId);
     }
+
     return args;
   }
 
-  /**
-   * Format AgentInput with context as a structured preamble before prompt.
-   */
   private buildFullPrompt(input: AgentInput): string {
     const contextPreamble = this.formatContext(input.context);
+
     return contextPreamble
       ? `${contextPreamble}\n\n---\n\n${input.prompt}`
       : input.prompt;
@@ -186,16 +211,18 @@ export class AgyAdapter implements AgentAdapter {
     if (ctx.length === 0) return "";
 
     return ctx
-      .map((c, index) => {
-        const type = c.type === "selection" ? "selection" : "note";
-        const header = `<obsidian-context index="${index + 1}" type="${type}" file="${escapeAttribute(c.file)}">`;
+      .map((context, index) => {
+        const type =
+          context.type === "selection" ? "selection" : "note";
+        const header =
+          `<obsidian-context index="${index + 1}" type="${type}" file="${escapeAttribute(context.file)}">`;
 
-        return `${header}\n${c.content}\n</obsidian-context>`;
+        return (
+          `${header}\n${context.content}\n</obsidian-context>`
+        );
       })
       .join("\n\n");
   }
-
-  // ── stdout reader ─────────────────────────────────────────────────────────
 
   private async *readEvents(
     proc: ChildProcess,
@@ -204,10 +231,15 @@ export class AgyAdapter implements AgentAdapter {
     let buffer = "";
     let stderr = "";
     let exitCode: number | null = null;
-    const processState: { spawnError?: Error } = {};
+    const processState: {
+      spawnError?: Error;
+      inputError?: Error;
+    } = {};
     let closed = false;
     let sawTerminalEvent = false;
-    let conversationId: string | undefined;
+    let protocolState: AgyProtocolState = {
+      sawText: false,
+    };
 
     const queue: string[] = [];
     let notify: (() => void) | null = null;
@@ -234,14 +266,21 @@ export class AgyAdapter implements AgentAdapter {
     });
 
     proc.stderr?.on("data", (chunk: Buffer) => {
-      const msg = chunk.toString();
-      stderr += msg;
-      const trimmed = msg.trim();
-      if (trimmed) console.warn("[Forge agent provider]", trimmed);
+      const message = chunk.toString();
+      stderr += message;
+      const trimmed = message.trim();
+      if (trimmed) {
+        console.warn("[Forge agent provider]", trimmed);
+      }
     });
 
-    proc.on("error", (err) => {
-      processState.spawnError = err;
+    proc.stdin?.on("error", (error) => {
+      processState.inputError = error;
+      wake();
+    });
+
+    proc.on("error", (error) => {
+      processState.spawnError = error;
       wake();
     });
 
@@ -262,18 +301,22 @@ export class AgyAdapter implements AgentAdapter {
 
       if (queue.length > 0) {
         const line = queue.shift()!;
-        conversationId = this.readConversationId(line) ?? conversationId;
-        const event = this.parseLine(line, conversationId);
+        const parsed = parseAgyLine(line, protocolState);
+        protocolState = parsed.state;
 
-        if (!event) continue;
+        for (const event of parsed.events) {
+          yield event;
 
-        yield event;
-
-        if (event.type === "completed" || event.type === "failed") {
-          sawTerminalEvent = true;
-          break;
+          if (
+            event.type === "completed" ||
+            event.type === "failed" ||
+            event.type === "cancelled"
+          ) {
+            sawTerminalEvent = true;
+          }
         }
 
+        if (parsed.terminal) break;
         continue;
       }
 
@@ -283,7 +326,9 @@ export class AgyAdapter implements AgentAdapter {
             yield { type: "cancelled" };
             break;
           }
+
           const detail =
+            processState.inputError?.message ||
             processState.spawnError?.message ||
             stderr.trim() ||
             (exitCode !== 0
@@ -298,10 +343,16 @@ export class AgyAdapter implements AgentAdapter {
         break;
       }
 
-      if (processState.spawnError) {
+      const processError =
+        processState.inputError ?? processState.spawnError;
+
+      if (processError) {
         yield {
           type: "failed",
-          failure: this.failureFrom(processState.spawnError, "process-failed"),
+          failure: this.failureFrom(
+            processError,
+            "process-failed",
+          ),
         };
         break;
       }
@@ -312,118 +363,30 @@ export class AgyAdapter implements AgentAdapter {
     }
   }
 
-  /**
-   * Parse one AGY NDJSON line into a normalized event.
-   */
-  private parseLine(
-    line: string,
-    conversationId?: string,
-  ): AgentStreamEvent | null {
-    let obj: Record<string, unknown>;
-
-    try {
-      obj = JSON.parse(line);
-    } catch {
-      // stdout should be machine-readable in stream-json mode. Ignore an
-      // unexpected diagnostic line here; stderr/exit handling will still
-      // surface a failed run to the UI.
-      return null;
-    }
-
-    const ev = obj["event"] as string | undefined;
-
-    if (ev === "init") {
-      return null;
-    }
-
-    if (ev === "step_update") {
-      const su = obj["step_update"] as Record<string, unknown> | undefined;
-      const delta = su?.["text_delta"] as string | undefined;
-
-      if (delta) return { type: "text", content: delta };
-      return null;
-    }
-
-    // Compatibility with older mocks/protocol experiments.
-    if (ev === "text") {
-      const text = obj["text"] as string | undefined;
-      if (text) return { type: "text", content: text };
-      return null;
-    }
-
-    if (ev === "result") {
-      const result = obj["result"] as Record<string, unknown> | undefined;
-      const status = String(result?.["status"] ?? "").toUpperCase();
-      const convId =
-        (result?.["conversation_id"] as string | undefined) || conversationId;
-
-      // AGY reports print-mode failures inside the terminal result envelope.
-      // Treat every explicit non-SUCCESS terminal state as an error instead
-      // of silently converting it to "done".
-      if (status && status !== "SUCCESS") {
-        const message = String(
-          result?.["error"] ??
-            `AGY finished with status ${status} without an error message.`,
-        );
-
-        return {
-          type: "failed",
-          failure: this.failureFrom(message, this.classifyFailure(message)),
-        };
-      }
-
-      return { type: "completed", conversationId: convId };
-    }
-
-    if (ev === "error") {
-      return {
-        type: "failed",
-        failure: this.failureFrom(
-          String(obj["error"] ?? "Unknown agent runtime error"),
-          "process-failed",
-        ),
-      };
-    }
-
-    return null;
-  }
-
-  private readConversationId(line: string): string | undefined {
-    try {
-      const value = JSON.parse(line) as Record<string, unknown>;
-      if (value["event"] !== "init") return undefined;
-      return (
-        (value["conversation_id"] as string | undefined) ||
-        ((value["init"] as Record<string, unknown> | undefined)?.[
-          "conversation_id"
-        ] as string | undefined)
-      );
-    } catch {
-      return undefined;
-    }
-  }
-
-  // ── listModels ────────────────────────────────────────────────────────────
-
   async listModels(): Promise<AgentModel[]> {
     const bin = await this.resolveBinary();
 
     return new Promise((resolve, reject) => {
-      const p = spawn(bin, ["models"], {
+      const process = spawn(bin, ["models"], {
         cwd: this.cwd,
         windowsHide: true,
       });
       let out = "";
       let err = "";
 
-      p.stdout?.on("data", (d: Buffer) => (out += d.toString()));
-      p.stderr?.on("data", (d: Buffer) => (err += d.toString()));
-      p.on("error", reject);
-      p.on("close", (code) => {
+      process.stdout?.on("data", (data: Buffer) => {
+        out += data.toString();
+      });
+      process.stderr?.on("data", (data: Buffer) => {
+        err += data.toString();
+      });
+      process.on("error", reject);
+      process.on("close", (code) => {
         if (code !== 0) {
           reject(
             new Error(
-              err.trim() || `Failed to list AGY models (exit ${code ?? "unknown"}).`,
+              err.trim() ||
+                `Failed to list AGY models (exit ${code ?? "unknown"}).`,
             ),
           );
           return;
@@ -434,38 +397,33 @@ export class AgyAdapter implements AgentAdapter {
           .map((line) => line.trim())
           .filter(Boolean)
           .map((line) => {
-            // Current human-readable output is column-oriented. Accept tabs
-            // and 2+ spaces so the selector still works across CLI versions.
-            const columns = line.split(/\t+|\s{2,}/).filter(Boolean);
+            const columns = line
+              .split(/\t+|\s{2,}/)
+              .filter(Boolean);
+
             if (columns.length < 2) return null;
+
             return {
               id: columns[0].trim(),
               name: columns.slice(1).join(" ").trim(),
             };
           })
-          .filter((model): model is AgentModel => model !== null);
+          .filter(
+            (model): model is AgentModel => model !== null,
+          );
 
         resolve(models);
       });
     });
   }
 
-  private classifyFailure(message: string): AgentFailure["code"] {
-    const normalized = message.toLowerCase();
-    if (normalized.includes("permission") || normalized.includes("approval")) {
-      return "permission-required";
-    }
-    if (normalized.includes("json") || normalized.includes("protocol")) {
-      return "protocol-invalid";
-    }
-    return "process-failed";
-  }
-
   private failureFrom(
     error: unknown,
     code: AgentFailure["code"],
   ): AgentFailure {
-    const diagnostic = error instanceof Error ? error.message : String(error);
+    const diagnostic =
+      error instanceof Error ? error.message : String(error);
+
     const message =
       code === "runtime-unavailable"
         ? "Agent runtime is unavailable. Configure its executable path and try again."
