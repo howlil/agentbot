@@ -142,6 +142,22 @@ export function parseAgyLine(
     (result?.["conversation_id"] as string | undefined) ||
     previous.conversationId;
 
+  if (!status) {
+    return {
+      events: [
+        {
+          type: "failed",
+          failure: failure(
+            "AGY result is missing a terminal status.",
+            "protocol-invalid",
+          ),
+        },
+      ],
+      state: { ...previous, conversationId },
+      terminal: true,
+    };
+  }
+
   if (status === "CANCELED" || status === "CANCELLED" || status === "INTERRUPTED") {
     return {
       events: [{ type: "cancelled" }],
