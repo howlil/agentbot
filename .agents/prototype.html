@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AGY Plugin — Interaction Prototype</title>
+<style>
+  /* ─── Reset & Base ─────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    background: #1a1a2e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 32px;
+    padding: 32px;
+  }
+
+  /* ─── Stage nav ────────────────────────────────── */
+  .stage-nav {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: #0d0d1a;
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    padding: 6px;
+    z-index: 100;
+  }
+  .stage-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: #6b6b9a;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .stage-btn:hover { color: #a0a0d0; background: #1a1a3a; }
+  .stage-btn.active { background: #7c5cbf; color: #fff; }
+
+  /* ─── Obsidian mock ────────────────────────────── */
+  .obsidian {
+    display: flex;
+    width: 900px;
+    height: 580px;
+    background: #1e1e2e;
+    border-radius: 12px;
+    border: 1px solid #2a2a4a;
+    overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    margin-top: 60px;
+  }
+
+  /* ─── Left: editor ─────────────────────────────── */
+  .editor-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #1e1e2e;
+    border-right: 1px solid #2a2a4a;
+  }
+  .editor-tab-bar {
+    display: flex;
+    align-items: center;
+    background: #181824;
+    border-bottom: 1px solid #2a2a4a;
+    padding: 0 12px;
+    height: 36px;
+    gap: 8px;
+  }
+  .editor-tab {
+    background: #1e1e2e;
+    color: #c0c0e0;
+    border-radius: 6px 6px 0 0;
+    padding: 4px 12px;
+    font-size: 13px;
+    border: 1px solid #2a2a4a;
+    border-bottom: none;
+  }
+  .editor-body {
+    flex: 1;
+    padding: 20px 24px;
+    color: #b0b0d0;
+    line-height: 1.7;
+    overflow-y: auto;
+    font-family: "Georgia", serif;
+  }
+  .editor-body h1 { color: #e0e0f8; font-size: 22px; margin-bottom: 16px; font-weight: 700; }
+  .editor-body p { margin-bottom: 12px; }
+  .editor-body .selected-text {
+    background: rgba(124,92,191,0.25);
+    border-left: 2px solid #7c5cbf;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+    color: #d0d0f0;
+    position: relative;
+    cursor: text;
+  }
+  .editor-body .selected-text::after {
+    content: "selected";
+    position: absolute;
+    right: 8px;
+    top: 4px;
+    font-size: 10px;
+    color: #7c5cbf;
+    font-family: system-ui, sans-serif;
+    font-style: normal;
+  }
+  /* applied highlight */
+  .editor-body .applied-text {
+    background: rgba(52,199,89,0.15);
+    border-left: 2px solid #34c759;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: block;
+    color: #d0f0d8;
+  }
+
+  /* ─── Right: sidebar ───────────────────────────── */
+  .sidebar {
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    background: #16161f;
+  }
+
+  /* Header */
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    height: 36px;
+    border-bottom: 1px solid #2a2a4a;
+    background: #181824;
+  }
+  .sidebar-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: #c0c0e0;
+    letter-spacing: 0.04em;
+  }
+  .sidebar-icon { color: #5a5a8a; font-size: 12px; cursor: pointer; }
+  .sidebar-icon:hover { color: #8a8ab0; }
+
+  /* Thread */
+  .thread {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Empty slate */
+  .empty-slate {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #4a4a6a;
+    text-align: center;
+    gap: 8px;
+    padding: 20px;
+  }
+  .empty-slate .empty-icon { font-size: 28px; }
+  .empty-slate .empty-label { font-size: 13px; color: #5a5a7a; }
+  .empty-slate .empty-hint  { font-size: 11px; color: #3a3a5a; }
+
+  /* Bubbles */
+  .bubble-user {
+    align-self: flex-end;
+    background: #7c5cbf;
+    color: #f0f0ff;
+    border-radius: 12px 12px 3px 12px;
+    padding: 8px 11px;
+    font-size: 13px;
+    max-width: 85%;
+    line-height: 1.5;
+  }
+  .bubble-agy {
+    align-self: flex-start;
+    background: #1f1f30;
+    color: #b8b8d8;
+    border-radius: 12px 12px 12px 3px;
+    padding: 10px 11px;
+    font-size: 13px;
+    max-width: 95%;
+    line-height: 1.5;
+    border: 1px solid #2a2a3e;
+  }
+  .bubble-agy.streaming::after {
+    content: "▋";
+    animation: blink 0.8s step-end infinite;
+    color: #7c5cbf;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Status line */
+  .status-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0 2px;
+    color: #5a5a8a;
+    font-size: 12px;
+  }
+  .spinner {
+    width: 12px; height: 12px;
+    border: 2px solid #2a2a4a;
+    border-top-color: #7c5cbf;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Proposal bubble */
+  .proposal-bubble {
+    background: #1a1a2a;
+    border: 1px solid #2a2a4a;
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .proposal-file-badge {
+    background: #13131e;
+    padding: 5px 10px;
+    color: #6060a0;
+    font-size: 11px;
+    border-bottom: 1px solid #2a2a4a;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .proposal-diff {
+    padding: 8px 10px;
+    font-family: "Menlo", "Fira Code", monospace;
+    font-size: 11.5px;
+    line-height: 1.8;
+  }
+  .diff-removed {
+    color: #ff6b6b;
+    background: rgba(255,107,107,0.08);
+    display: block;
+    padding: 0 4px;
+    border-radius: 3px;
+  }
+  .diff-added {
+    color: #6bffb5;
+    background: rgba(107,255,181,0.08);
+    display: block;
+    padding: 0 4px;
+    border-radius: 3px;
+  }
+  .proposal-actions {
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid #2a2a4a;
+    background: #13131e;
+  }
+  .btn-reject {
+    flex: 1;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #3a2a4a;
+    background: transparent;
+    color: #8a5a8a;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .btn-reject:hover { background: rgba(138,90,138,0.15); }
+  .btn-apply {
+    flex: 1.5;
+    padding: 6px;
+    border-radius: 6px;
+    border: none;
+    background: #7c5cbf;
+    color: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .btn-apply:hover { background: #8d6fd4; }
+
+  /* Applied / Rejected badge */
+  .result-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-applied  { background: rgba(52,199,89,0.15);  color: #34c759; border: 1px solid rgba(52,199,89,0.25); }
+  .badge-rejected { background: rgba(255,107,107,0.1); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.2); }
+
+  /* Composer */
+  .composer {
+    border-top: 1px solid #2a2a4a;
+    background: #13131e;
+    padding: 8px;
+  }
+  .context-chips {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(124,92,191,0.15);
+    color: #9a7bcf;
+    border: 1px solid rgba(124,92,191,0.3);
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .chip-dot { width: 5px; height: 5px; border-radius: 50%; background: #7c5cbf; }
+  .composer-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+  }
+  .composer-textarea {
+    flex: 1;
+    background: #1a1a2a;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    color: #c0c0e0;
+    padding: 7px 10px;
+    font-size: 13px;
+    resize: none;
+    min-height: 34px;
+    max-height: 80px;
+    font-family: inherit;
+    outline: none;
+    line-height: 1.4;
+  }
+  .composer-textarea:focus { border-color: #7c5cbf; }
+  .composer-textarea::placeholder { color: #3a3a5a; }
+  .composer-textarea:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-send {
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    border: none;
+    background: #7c5cbf;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .btn-send:hover { background: #8d6fd4; }
+  .btn-send:disabled { opacity: 0.3; cursor: not-allowed; background: #3a3a5a; }
+
+  /* Error state */
+  .error-slate {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    text-align: center;
+  }
+  .error-icon { font-size: 28px; }
+  .error-title { color: #ff6b6b; font-size: 14px; font-weight: 600; }
+  .error-body  { color: #5a5a7a; font-size: 12px; }
+  .btn-configure {
+    padding: 7px 16px;
+    border-radius: 7px;
+    border: 1px solid #ff6b6b44;
+    background: rgba(255,107,107,0.1);
+    color: #ff6b6b;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+  .btn-configure:hover { background: rgba(255,107,107,0.2); }
+
+  /* Annotations */
+  .annotation-panel {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0d0d1a;
+    border: 1px solid #2a2a4a;
+    border-radius: 10px;
+    padding: 10px 18px;
+    color: #7a7aaa;
+    font-size: 12px;
+    text-align: center;
+    max-width: 600px;
+  }
+  .annotation-panel strong { color: #b0b0d8; }
+  .annotation-panel .action-hint { color: #7c5cbf; font-weight: 600; }
+
+  /* Utility */
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ─── Stage Nav ───────────────────────────────────────── -->
+<div class="stage-nav">
+  <button class="stage-btn active" onclick="goTo('empty')">① EMPTY</button>
+  <button class="stage-btn" onclick="goTo('running')">② RUNNING</button>
+  <button class="stage-btn" onclick="goTo('proposal')">③ PROPOSAL</button>
+  <button class="stage-btn" onclick="goTo('applied')">④ APPLIED</button>
+  <button class="stage-btn" onclick="goTo('error')">⚠ ERROR</button>
+</div>
+
+<!-- ─── Obsidian Mock ───────────────────────────────────── -->
+<div class="obsidian">
+
+  <!-- Editor pane -->
+  <div class="editor-pane">
+    <div class="editor-tab-bar">
+      <div class="editor-tab">Event-driven systems.md</div>
+    </div>
+    <div class="editor-body">
+      <h1>Event-driven Systems</h1>
+      <p>Event-driven architecture is a software design pattern in which decoupled components communicate through events.</p>
+
+      <!-- EMPTY / RUNNING / PROPOSAL state: show original selected text -->
+      <span class="selected-text" id="sel-original">
+        The producer sends data and waits for the consumer to finish processing before continuing to the next task.
+      </span>
+
+      <!-- APPLIED state: show new text (hidden by default) -->
+      <span class="applied-text hidden" id="sel-applied">
+        The producer emits an event without waiting for the consumer to synchronously process it, decoupling both sides of the communication.
+      </span>
+
+      <p>This pattern enables high scalability and resilience across distributed systems.</p>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">✦ AGY</span>
+      <span class="sidebar-icon">✕</span>
+    </div>
+
+    <!-- Thread area -->
+    <div class="thread" id="thread">
+
+      <!-- EMPTY state -->
+      <div class="empty-slate" id="state-empty">
+        <span class="empty-icon">✦</span>
+        <span class="empty-label">Ask AGY about this note</span>
+        <span class="empty-hint">Selection detected — AGY will read it</span>
+      </div>
+
+      <!-- RUNNING state content -->
+      <div id="state-running" class="hidden">
+        <div class="bubble-user">perbaiki bagian ini</div>
+        <div class="status-line">
+          <div class="spinner"></div>
+          Reading selection…
+        </div>
+        <div class="bubble-agy streaming" id="stream-text">Analyzing the selected paragraph</div>
+      </div>
+
+      <!-- PROPOSAL state content -->
+      <div id="state-proposal" class="hidden">
+        <div class="bubble-user">perbaiki bagian ini</div>
+        <div class="bubble-agy">
+          Kalimat saat ini menggambarkan model <em>synchronous</em>, bukan event-driven.
+          Saya usulkan perubahan berikut:
+        </div>
+        <div class="proposal-bubble">
+          <div class="proposal-file-badge">
+            <span>📄</span> Event-driven systems.md
+          </div>
+          <div class="proposal-diff">
+            <span class="diff-removed">- The producer sends data and waits for the consumer to finish</span>
+            <span class="diff-removed">- processing before continuing to the next task.</span>
+            <span class="diff-added">+ The producer emits an event without waiting for the consumer</span>
+            <span class="diff-added">+ to synchronously process it, decoupling both sides of the</span>
+            <span class="diff-added">+ communication.</span>
+          </div>
+          <div class="proposal-actions" id="proposal-actions">
+            <button class="btn-reject" onclick="doReject()">Reject</button>
+            <button class="btn-apply" onclick="doApply()">Apply ✓</button>
+          </div>
+          <div class="hidden" id="proposal-result"></div>
+        </div>
+      </div>
+
+      <!-- APPLIED state content -->
+      <div id="state-applied" class="hidden">
+        <div class="bubble-user">perbaiki bagian ini</div>
+        <div class="bubble-agy">
+          Kalimat saat ini menggambarkan model <em>synchronous</em>, bukan event-driven.
+          Saya usulkan perubahan berikut:
+        </div>
+        <div class="proposal-bubble">
+          <div class="proposal-file-badge">
+            <span>📄</span> Event-driven systems.md
+          </div>
+          <div class="proposal-diff">
+            <span class="diff-removed">- The producer sends data and waits for the consumer to finish</span>
+            <span class="diff-removed">- processing before continuing to the next task.</span>
+            <span class="diff-added">+ The producer emits an event without waiting for the consumer</span>
+            <span class="diff-added">+ to synchronously process it, decoupling both sides of the</span>
+            <span class="diff-added">+ communication.</span>
+          </div>
+          <div style="padding: 8px 10px; background: #13131e;">
+            <span class="result-badge badge-applied">✓ Applied to Event-driven systems.md</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ERROR state -->
+      <div class="error-slate hidden" id="state-error">
+        <span class="error-icon">⚠</span>
+        <span class="error-title">AGY unavailable</span>
+        <span class="error-body">AGY CLI was not found.<br>Make sure <code>agy</code> is installed and in PATH.</span>
+        <button class="btn-configure">Configure AGY →</button>
+      </div>
+
+    </div><!-- /thread -->
+
+    <!-- Composer -->
+    <div class="composer">
+      <div class="context-chips" id="context-chips">
+        <span class="chip"><span class="chip-dot"></span>@selection</span>
+        <span class="chip"><span class="chip-dot"></span>@Event-driven systems.md</span>
+      </div>
+      <div class="composer-row">
+        <textarea
+          class="composer-textarea"
+          id="composer-input"
+          placeholder="Ask AGY…"
+          rows="1"
+          oninput="handleInput(this)"
+          onkeydown="handleKey(event)"
+        ></textarea>
+        <button class="btn-send" id="btn-send" disabled onclick="doSend()">↑</button>
+      </div>
+    </div>
+  </div><!-- /sidebar -->
+
+</div><!-- /obsidian -->
+
+<!-- Annotation -->
+<div class="annotation-panel" id="annotation">
+  <strong>EMPTY</strong> — Composer active. Selection detected → chip shown automatically.
+  <br><span class="action-hint">→ Type a message and press Enter or ↑ to send</span>
+</div>
+
+<script>
+const STATES = {
+  empty: {
+    show: ['state-empty'],
+    hide: ['state-running','state-proposal','state-applied','state-error'],
+    composerDisabled: false,
+    sendDisabled: false,
+    editorSelected: true,
+    editorApplied: false,
+    annotation: '<strong>EMPTY</strong> — Composer active. Context chips auto-resolved from selection.<br><span class="action-hint">→ Type a message and press Enter (or click ↑ button)</span>',
+  },
+  running: {
+    show: ['state-running'],
+    hide: ['state-empty','state-proposal','state-applied','state-error'],
+    composerDisabled: true,
+    sendDisabled: true,
+    editorSelected: true,
+    editorApplied: false,
+    annotation: '<strong>RUNNING</strong> — Textarea disabled. AGY reading selection. Tokens stream in.<br><span class="action-hint">→ Wait a moment… (click ③ PROPOSAL to jump ahead)</span>',
+  },
+  proposal: {
+    show: ['state-proposal'],
+    hide: ['state-empty','state-running','state-applied','state-error'],
+    composerDisabled: false,
+    sendDisabled: false,
+    editorSelected: true,
+    editorApplied: false,
+    annotation: '<strong>PROPOSAL</strong> — Diff visible. Composer re-enabled for follow-up.<br><span class="action-hint">→ Click <strong>Apply ✓</strong> to write the change, or <strong>Reject</strong> to dismiss</span>',
+  },
+  applied: {
+    show: ['state-applied'],
+    hide: ['state-empty','state-running','state-proposal','state-error'],
+    composerDisabled: false,
+    sendDisabled: false,
+    editorSelected: false,
+    editorApplied: true,
+    annotation: '<strong>APPLIED</strong> — Single CM6 transaction written. Editor updated. Ctrl+Z works natively.<br><span class="action-hint">→ Composer active for the next message</span>',
+  },
+  error: {
+    show: ['state-error'],
+    hide: ['state-empty','state-running','state-proposal','state-applied'],
+    composerDisabled: true,
+    sendDisabled: true,
+    editorSelected: false,
+    editorApplied: false,
+    annotation: '<strong>ERROR</strong> — AGY CLI not found. All inputs disabled. Only [Configure] is actionable.<br><span class="action-hint">→ User clicks Configure → opens Obsidian plugin settings</span>',
+  },
+};
+
+let currentState = 'empty';
+let streamInterval = null;
+let streamTokens = [
+  'Analyzing ', 'the selected ', 'paragraph…\n\nThe original ',
+  'sentence ', 'describes a ', 'synchronous ', 'model. ', 'In event-driven ',
+  'systems, ', 'producers ', 'emit ', 'events ', 'and ', 'do not ',
+  'wait ', 'for consumers ', 'to finish.'
+];
+let streamIdx = 0;
+
+function goTo(state) {
+  if (streamInterval) { clearInterval(streamInterval); streamInterval = null; }
+  currentState = state;
+
+  const cfg = STATES[state];
+
+  // Show/hide thread children
+  cfg.show.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('hidden');
+  });
+  cfg.hide.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+
+  // Composer
+  const ta = document.getElementById('composer-input');
+  const sb = document.getElementById('btn-send');
+  ta.disabled = cfg.composerDisabled;
+  sb.disabled = cfg.composerDisabled || ta.value.trim() === '';
+
+  // Editor highlight
+  document.getElementById('sel-original').classList.toggle('hidden', cfg.editorApplied);
+  document.getElementById('sel-applied').classList.toggle('hidden', !cfg.editorApplied);
+
+  // Nav buttons
+  document.querySelectorAll('.stage-btn').forEach(b => b.classList.remove('active'));
+  const stateIndex = { empty:0, running:1, proposal:2, applied:3, error:4 };
+  document.querySelectorAll('.stage-btn')[stateIndex[state]].classList.add('active');
+
+  // Annotation
+  document.getElementById('annotation').innerHTML = cfg.annotation;
+
+  // Proposal state: reset actions
+  if (state === 'proposal') {
+    document.getElementById('proposal-actions').classList.remove('hidden');
+    document.getElementById('proposal-result').classList.add('hidden');
+  }
+
+  // Running: start stream sim
+  if (state === 'running') {
+    const el = document.getElementById('stream-text');
+    el.textContent = '';
+    streamIdx = 0;
+    streamInterval = setInterval(() => {
+      if (streamIdx < streamTokens.length) {
+        el.textContent += streamTokens[streamIdx++];
+      } else {
+        clearInterval(streamInterval);
+        // auto-advance to proposal after short pause
+        setTimeout(() => goTo('proposal'), 600);
+      }
+    }, 90);
+  }
+}
+
+function handleInput(el) {
+  const sb = document.getElementById('btn-send');
+  sb.disabled = el.value.trim() === '';
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 80) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (!document.getElementById('btn-send').disabled) doSend();
+  }
+}
+
+function doSend() {
+  const ta = document.getElementById('composer-input');
+  ta.value = '';
+  ta.style.height = '';
+  document.getElementById('btn-send').disabled = true;
+  goTo('running');
+}
+
+function doApply() {
+  document.getElementById('proposal-actions').classList.add('hidden');
+  const result = document.getElementById('proposal-result');
+  result.innerHTML = '<div style="padding:8px 10px;background:#13131e"><span class="result-badge badge-applied">✓ Applied to Event-driven systems.md</span></div>';
+  result.classList.remove('hidden');
+
+  // Update editor
+  document.getElementById('sel-original').classList.add('hidden');
+  document.getElementById('sel-applied').classList.remove('hidden');
+
+  // Update nav + annotation
+  document.querySelectorAll('.stage-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.stage-btn')[3].classList.add('active');
+  document.getElementById('annotation').innerHTML =
+    '<strong>APPLIED</strong> — Single CM6 transaction written. Editor reflects the change.<br>' +
+    '<span class="action-hint">→ Ctrl+Z in Obsidian would revert this in one undo step</span>';
+
+  currentState = 'applied';
+}
+
+function doReject() {
+  document.getElementById('proposal-actions').classList.add('hidden');
+  const result = document.getElementById('proposal-result');
+  result.innerHTML = '<div style="padding:8px 10px;background:#13131e"><span class="result-badge badge-rejected">✕ Rejected — no changes made</span></div>';
+  result.classList.remove('hidden');
+  document.getElementById('annotation').innerHTML =
+    '<strong>PROPOSAL → Rejected</strong> — File unchanged. Composer active for follow-up.<br>' +
+    '<span class="action-hint">→ User can refine the prompt and send again</span>';
+}
+
+// Boot
+goTo('empty');
+</script>
+</body>
+</html>

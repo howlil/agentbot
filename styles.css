@@ -1,0 +1,340 @@
+/* ─── AGY Obsidian Plugin — Styles ───────────────────────────────────────── */
+/* All classes prefixed `agy-`. Uses Obsidian CSS variables for theme compat. */
+
+/* ── Shell ──────────────────────────────────────────────────────────────── */
+.agy-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background-primary);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.agy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  height: 36px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  flex-shrink: 0;
+  gap: 8px;
+}
+.agy-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  letter-spacing: 0.04em;
+}
+.agy-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.agy-model-select {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+  max-width: 140px;
+}
+.agy-new-btn {
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 1px 6px;
+}
+.agy-new-btn:hover { color: var(--text-normal); }
+
+/* ── Thread ─────────────────────────────────────────────────────────────── */
+.agy-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scroll-behavior: smooth;
+}
+
+/* ── Empty slate ────────────────────────────────────────────────────────── */
+.agy-empty-slate {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 32px 20px;
+}
+.agy-empty-icon  { font-size: 30px; color: var(--text-faint); }
+.agy-empty-label { font-size: 13px; color: var(--text-muted); }
+
+/* ── Error slate ────────────────────────────────────────────────────────── */
+.agy-error-slate {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 20px;
+  text-align: center;
+}
+.agy-error-icon  { font-size: 28px; }
+.agy-error-title { font-size: 14px; font-weight: 600; color: var(--text-error); }
+.agy-error-body  { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.agy-configure-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--text-error);
+  background: transparent;
+  color: var(--text-error);
+  cursor: pointer;
+  font-size: 12px;
+}
+.agy-configure-btn:hover { opacity: 0.8; }
+
+/* ── Chat bubbles ───────────────────────────────────────────────────────── */
+.agy-bubble {
+  max-width: 95%;
+  font-size: 13px;
+  line-height: 1.6;
+  border-radius: 10px;
+  padding: 8px 11px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.agy-bubble--user {
+  align-self: flex-end;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-radius: 12px 12px 3px 12px;
+  max-width: 85%;
+}
+.agy-bubble--agy {
+  align-self: flex-start;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px 12px 12px 3px;
+}
+.agy-bubble--streaming::after {
+  content: "▋";
+  color: var(--interactive-accent);
+  animation: agy-blink 0.8s step-end infinite;
+}
+@keyframes agy-blink { 50% { opacity: 0; } }
+
+/* ── Status line ────────────────────────────────────────────────────────── */
+.agy-status-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 2px;
+}
+.agy-spinner {
+  width: 12px; height: 12px;
+  border: 2px solid var(--background-modifier-border);
+  border-top-color: var(--interactive-accent);
+  border-radius: 50%;
+  animation: agy-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes agy-spin { to { transform: rotate(360deg); } }
+
+/* ── Inline error ───────────────────────────────────────────────────────── */
+.agy-inline-error {
+  font-size: 12px;
+  color: var(--text-error);
+  padding: 6px 10px;
+  background: rgba(var(--color-red-rgb, 255,59,48), 0.06);
+  border-radius: 6px;
+  border: 1px solid rgba(var(--color-red-rgb, 255,59,48), 0.2);
+}
+
+/* ── Proposal bubble ────────────────────────────────────────────────────── */
+.agy-proposal {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 12px;
+  background: var(--background-primary);
+}
+.agy-proposal-badge {
+  background: var(--background-secondary);
+  padding: 5px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.agy-proposal-reason {
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.agy-proposal-diff {
+  padding: 8px 10px;
+  font-family: var(--font-monospace);
+  font-size: 11.5px;
+  line-height: 1.8;
+  background: var(--background-primary);
+}
+.agy-diff-removed {
+  display: block; padding: 0 4px; border-radius: 3px;
+  color: var(--text-error);
+  background: rgba(var(--color-red-rgb, 255,59,48), 0.06);
+}
+.agy-diff-added {
+  display: block; padding: 0 4px; border-radius: 3px;
+  color: var(--color-green, #34c759);
+  background: rgba(52, 199, 89, 0.06);
+}
+.agy-proposal-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+.agy-btn-reject {
+  flex: 1; padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer; font-size: 12px;
+}
+.agy-btn-reject:hover { background: var(--background-modifier-hover); }
+.agy-btn-apply {
+  flex: 1.5; padding: 6px;
+  border-radius: 6px;
+  border: none;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  cursor: pointer; font-size: 12px; font-weight: 600;
+}
+.agy-btn-apply:hover { opacity: 0.9; }
+.agy-btn-apply:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Result badges ──────────────────────────────────────────────────────── */
+.agy-result-badge {
+  display: block;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.agy-badge--applied {
+  color: var(--color-green, #34c759);
+  background: rgba(52, 199, 89, 0.08);
+  border-top: 1px solid var(--background-modifier-border);
+}
+.agy-badge--rejected {
+  color: var(--text-muted);
+  border-top: 1px solid var(--background-modifier-border);
+}
+.agy-badge--stale {
+  color: var(--text-warning, #ff9f0a);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* ── Composer ───────────────────────────────────────────────────────────── */
+.agy-composer {
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  padding: 8px;
+  flex-shrink: 0;
+}
+.agy-chips {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+  min-height: 18px;
+}
+.agy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(var(--color-accent-1-rgb, 124, 92, 191), 0.12);
+  color: var(--interactive-accent);
+  border: 1px solid rgba(var(--color-accent-1-rgb, 124, 92, 191), 0.3);
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.agy-chip--hidden { display: none !important; }
+.agy-chip-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+}
+.agy-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.agy-input {
+  flex: 1;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  color: var(--text-normal);
+  padding: 6px 10px;
+  font-size: 13px;
+  resize: none;
+  min-height: 32px;
+  max-height: 80px;
+  font-family: var(--font-interface);
+  outline: none;
+  line-height: 1.5;
+}
+.agy-input:focus   { border-color: var(--interactive-accent); }
+.agy-input::placeholder { color: var(--text-faint); }
+.agy-input:disabled { opacity: 0.4; }
+.agy-btn-group {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+}
+.agy-send-btn, .agy-cancel-btn {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.agy-send-btn {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.agy-send-btn:hover { opacity: 0.9; }
+.agy-send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.agy-cancel-btn {
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+}
+.agy-cancel-btn:hover { color: var(--text-error); }
+
+/* ── Utility ────────────────────────────────────────────────────────────── */
+.agy-hidden { display: none !important; }
