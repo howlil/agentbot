@@ -1,7 +1,7 @@
-# Forge Development Workflow
+# Nox Development Workflow
 
-This repository builds Forge, an Obsidian plugin for a Learning OS. Keep
-changes small, behavior-first, and releasable. Forge is agent-runtime agnostic;
+This repository builds Nox, an Obsidian plugin for a Learning OS. Keep
+changes small, behavior-first, and releasable. Nox is agent-runtime agnostic;
 the current provider integration is an implementation detail behind
 `AgentAdapter`.
 
@@ -41,9 +41,9 @@ explicit request.
 | `src/persistence/VaultLearningStore.ts` | Durable evidence-backed learning progress |
 | `src/session/` | Conversation and model persistence |
 | `src/agent/AgyAdapter.ts` | Current provider process/protocol adapter behind `AgentAdapter` |
-| `public/forge.png` | Canonical Forge brand asset used by product surfaces |
-| `styles.css` | Tailwind v4 CSS entry with theme-aware Forge styles |
-| `DESIGN.md` | Forge interface graph, semantic tokens, and design acceptance gates |
+| `public/nox.png` | Canonical Nox brand asset used by product surfaces |
+| `styles.css` | Tailwind v4 CSS entry with theme-aware Nox styles |
+| `DESIGN.md` | Nox interface graph, semantic tokens, and design acceptance gates |
 | `dist/` | Generated build artifacts; never edit directly |
 | `scripts/deploy.mjs` | Copies `dist/` into an Obsidian vault |
 
@@ -151,17 +151,17 @@ Every UI change must remain inside the visual rules in `DESIGN.md`:
 - Use `4px / 6px / 8px / 10px / 12px / 16px / 24px` spacing steps.
 - Keep normal UI at `12–14px`, major headings near `21px`, and controls at
   approximately `28px` high.
-- Prefer semantic Forge tokens and hairline borders. Purple communicates
+- Prefer semantic Nox tokens and hairline borders. Purple communicates
   active AI state, focus, selection, or an intentional primary action.
 - Reject gradients, oversized hero composition, giant controls, broad shadows,
   decorative badges, and cards without a responsibility boundary.
-- Use `public/forge.png` for Forge brand marks. Do not recreate the logo with
+- Use `public/nox.png` for Nox brand marks. Do not recreate the logo with
   text glyphs, unrelated Lucide icons, or a second inline artwork variant.
 - Before finishing, compare the changed surface against the `DESIGN.md`
   acceptance test and run the UI verification gate.
 
 If a requested visual reference conflicts with these rules, preserve the
-compact Forge system and extract only the reference's hierarchy and interaction
+compact Nox system and extract only the reference's hierarchy and interaction
 behavior. If a new interaction or AI state is consequential, update the graph
 and verify that state at the same boundary.
 
@@ -208,11 +208,11 @@ deployment. State those gaps honestly.
 The current plugin identity is:
 
 ```text
-package name: forge-obsidian
-view type: forge-sidebar
+package name: nox-obsidian
+view type: nox-sidebar
 artifact: dist/main.js
 styles: dist/styles.css
-deployment target: .obsidian/plugins/forge-obsidian
+deployment target: .obsidian/plugins/nox-obsidian
 ```
 
 Use:
@@ -227,7 +227,7 @@ Deployment copies the contents of `dist/` and may update the target vault's
 user explicitly asks for it. A plugin ID change creates a new Obsidian plugin
 identity; do not silently delete the previous plugin directory or settings.
 
-Forge is the only user-facing product name. Provider names may appear only in
+Nox is the only user-facing product name. Provider names may appear only in
 the adapter implementation, provider-specific diagnostics, and integration
 notes; never in UI labels, product copy, or normalized contracts.
 
@@ -266,7 +266,7 @@ APIs so native undo remains available.
 ### Process lifecycle
 
 - Spawn the configured agent runtime only when needed.
-- Pass user content as arguments, never through shell interpolation.
+- Pass user content through provider-supported structured stdin/input, never through shell interpolation or oversized argv payloads.
 - Capture stderr and convert malformed or failed streams into recoverable UI
   errors.
 - Cancel and dispose child processes on stop, view close, and plugin unload.
