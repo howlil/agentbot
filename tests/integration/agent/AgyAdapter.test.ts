@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
-import { AgyAdapter } from "../../src/agent/AgyAdapter";
-import { collectEvents } from "../support/collect-events";
+import { AgyAdapter } from "../../../src/agent/AgyAdapter";
+import { collectEvents } from "../../support/collect-events";
 
 class FakeInput extends EventEmitter {
   writes: string[] = [];
