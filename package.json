@@ -22,7 +22,8 @@
     "test:unit": "node scripts/test.mjs unit",
     "test:integration": "node scripts/test.mjs integration",
     "test:all": "node scripts/test.mjs all",
-    "verify": "pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm build"
+    "verify": "pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm build && pnpm test:artifacts",
+    "test:artifacts": "node scripts/verify-artifacts.mjs"
   },
   "keywords": [
     "obsidian",
