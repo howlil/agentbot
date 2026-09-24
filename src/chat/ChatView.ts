@@ -642,16 +642,27 @@ export class ChatView extends ItemView {
     const prefix = token ? this.input.value.slice(0, token.start) : this.input.value;
 
     if (action.type === "vault-note") {
-      const context = await this.learning.loadNoteContext(action.path);
-      if (context && !this.extraCtx.some((item) => item.file === context.file)) {
+      const exists = this.extraCtx.some(
+        (item) =>
+          item.kind === "vault-note" &&
+          item.path === action.path,
+      );
+
+      if (!exists) {
+        const ref: ExplicitContextRef = {
+          kind: "vault-note",
+          path: action.path,
+        };
+
         this.attachments.push({
-          name: context.file.split("/").pop() ?? context.file,
-          context,
+          name: action.path.split("/").pop() ?? action.path,
+          ref,
         });
         this.extraCtx = this.attachments.map((item) => item.ref);
         this.renderAttachments();
         await this.syncChips();
       }
+
       this.input.value = prefix;
       this.closePromptMenu();
       this.onInput();
