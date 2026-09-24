@@ -9,6 +9,7 @@ export interface KnowledgeGap {
 export interface LearningEvidence {
   id: string;
   type: "practice" | "review" | "project";
+  scope: "learner" | "material";
   concept: string;
   source: string;
   outcome?: string;
@@ -16,7 +17,7 @@ export interface LearningEvidence {
 }
 
 export interface LearningState {
-  version: 1;
+  version: 2;
   target: string | null;
   currentTopic?: string;
   gaps: KnowledgeGap[];
@@ -24,7 +25,7 @@ export interface LearningState {
 }
 
 export const DEFAULT_LEARNING_STATE: LearningState = {
-  version: 1,
+  version: 2,
   target: null,
   gaps: [],
   evidence: [],
