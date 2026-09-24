@@ -38,3 +38,6 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Verify artifacts
+        run: pnpm test:artifacts
