@@ -28,3 +28,5 @@ export class Plugin {
   }
   async saveData(_data: unknown): Promise<void> {}
 }
+
+export class App {}
