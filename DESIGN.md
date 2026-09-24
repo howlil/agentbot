@@ -37,7 +37,7 @@ Forge
     ├── IntentChip?
     ├── AttachmentChip*
     ├── PromptInput
-    └── AddContext / ContextSummary / Model / Dictation / Send
+    └── AddContext / Model / Send
 ```
 
 ## Card decision
@@ -75,9 +75,17 @@ Typing `@name` searches vault Markdown notes and adds real context.
 
 ## Visual system
 
-Use mostly neutral Obsidian-mapped tokens. Purple inherits
-`--interactive-accent` and means active AI intent, focus, selection, or a
-primary AI action.
+Use a deliberate light-mode token ratio:
+
+```text
+80% white surfaces
+15% soft purple canvas / inset surfaces
+5% purple accent for active AI state and primary actions
+```
+
+Forge owns these semantic tokens instead of inheriting arbitrary Obsidian
+theme colors. Purple means active AI intent, focus, selection, or a primary AI
+action. It should not decorate every surface.
 
 Green = correct/success/applied.
 Orange = partial/warning/review.
@@ -118,10 +126,12 @@ as already executed.
 
 Ask anything about this note...
 
-+   @index.md · selection     Model ▾   mic   send
++                              Model ▾   send
 ```
 
-Composer radius 14px, input 13px, controls 28px. Model is visually secondary.
+Composer radius 10px, input 13px, controls 28px. Model is visually secondary.
+The plus control owns context and file actions; do not duplicate it with a
+separate `No context` or context selector button.
 
 ## Motion
 

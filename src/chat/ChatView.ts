@@ -1,4 +1,10 @@
-import { ItemView, MarkdownRenderer, WorkspaceLeaf } from "obsidian";
+import {
+  ItemView,
+  MarkdownRenderer,
+  setIcon,
+  WorkspaceLeaf,
+  type IconName,
+} from "obsidian";
 import { LearningController } from "../learning/LearningController";
 import {
   LearningActionKind,
@@ -57,9 +63,14 @@ interface PromptMenuItem {
   key: string;
   name: string;
   description: string;
-  icon: string;
+  icon: IconName;
   disabled?: boolean;
   action: PromptMenuAction;
+}
+
+function setForgeIcon(element: HTMLElement, icon: IconName): void {
+  element.empty();
+  setIcon(element, icon);
 }
 
 function parsePromptToken(value: string): {
@@ -88,9 +99,7 @@ export class ChatView extends ItemView {
   private noteChip!: HTMLElement;
   private systemChip!: HTMLElement;
   private cancelBtn!: HTMLButtonElement;
-  private contextSelect!: HTMLButtonElement;
   private modelSelect!: HTMLSelectElement;
-  private dictationBtn!: HTMLButtonElement;
   private fileInput!: HTMLInputElement;
   private promptPlusBtn!: HTMLButtonElement;
   private attachmentsEl: HTMLElement | null = null;
@@ -100,8 +109,6 @@ export class ChatView extends ItemView {
   private promptMenuActive = 0;
   private promptMenuRows: HTMLButtonElement[] = [];
   private promptMenuRequest = 0;
-  private dictationRecognition: any = null;
-  private dictationListening = false;
   private attachments: Array<{ name: string; context: AgentContext }> = [];
 
   private agentCursorEl: HTMLElement | null = null;
@@ -192,9 +199,6 @@ export class ChatView extends ItemView {
 
   async onClose(): Promise<void> {
     this.learning.cancel();
-    this.dictationRecognition?.stop?.();
-    this.dictationRecognition = null;
-    this.dictationListening = false;
     this.stopThinkingSequence();
     this.stopLoadingTimer();
   }
@@ -222,10 +226,13 @@ export class ChatView extends ItemView {
 
     const newBtn = right.createEl("button", {
       cls: "forge-new-btn",
-      text: "＋",
+      attr: {
+        type: "button",
+        "aria-label": "New learning session",
+      },
     });
+    setForgeIcon(newBtn, "plus");
     newBtn.title = "New learning session";
-    newBtn.setAttribute("aria-label", "New learning session");
     newBtn.addEventListener("click", async () => {
       await this.learning.newSession();
       this.extraCtx = [];
@@ -239,12 +246,12 @@ export class ChatView extends ItemView {
 
     const moreBtn = right.createEl("button", {
       cls: "forge-more-btn",
-      text: "⋯",
       attr: {
         type: "button",
         "aria-label": "Open Forge settings",
       },
     });
+    setForgeIcon(moreBtn, "more-horizontal");
     moreBtn.title = "Forge settings";
     moreBtn.addEventListener("click", () => this.openSettings());
   }
@@ -361,22 +368,6 @@ export class ChatView extends ItemView {
     });
 
     const controls = box.createDiv({ cls: "forge-composer-controls" });
-    this.promptPlusBtn = controls.createEl("button", {
-      cls: "forge-prompt-plus",
-      text: "＋",
-      attr: {
-        type: "button",
-        "aria-label": "Add context or file",
-        "aria-expanded": "false",
-      },
-    });
-    this.promptPlusBtn.title = "Add context or file";
-    this.promptPlusBtn.addEventListener("click", () => {
-      this.promptMenu = this.promptMenu === "source" ? null : "source";
-      this.promptMenuActive = 0;
-      this.renderPromptMenu();
-      this.input.focus();
-    });
 
     this.input = controls.createEl("textarea", {
       cls: "forge-input",
@@ -389,22 +380,24 @@ export class ChatView extends ItemView {
     this.input.addEventListener("keydown", (event) => this.onKey(event));
 
     const footer = box.createDiv({ cls: "forge-composer-footer" });
-    const tools = footer.createDiv({ cls: "forge-composer-tools" });
-
-    this.contextSelect = tools.createEl("button", {
-      cls: "forge-context-select",
-      text: "Current note",
+    this.promptPlusBtn = footer.createEl("button", {
+      cls: "forge-prompt-plus",
       attr: {
         type: "button",
-        "aria-label": "Choose context",
+        "aria-label": "Add context or file",
+        "aria-expanded": "false",
       },
     });
-    this.contextSelect.addEventListener("click", () => {
+    setForgeIcon(this.promptPlusBtn, "plus");
+    this.promptPlusBtn.title = "Add context or file";
+    this.promptPlusBtn.addEventListener("click", () => {
       this.promptMenu = this.promptMenu === "source" ? null : "source";
       this.promptMenuActive = 0;
-      this.renderPromptMenu();
+      void this.renderPromptMenu();
       this.input.focus();
     });
+
+    const tools = footer.createDiv({ cls: "forge-composer-tools" });
 
     this.modelSelect = tools.createEl("select", {
       cls: "forge-model-select",
@@ -422,24 +415,13 @@ export class ChatView extends ItemView {
       },
     });
 
-    this.dictationBtn = tools.createEl("button", {
-      cls: "forge-composer-icon-btn",
-      text: "◉",
-      attr: {
-        type: "button",
-        "aria-label": "Start dictation",
-        "aria-pressed": "false",
-      },
-    });
-    this.dictationBtn.title = "Start dictation";
-    this.dictationBtn.addEventListener("click", () => this.toggleDictation());
-
     const btnGroup = footer.createDiv({ cls: "forge-btn-group" });
 
     this.cancelBtn = btnGroup.createEl("button", {
       cls: "forge-cancel-btn forge-hidden",
-      text: "×",
+      attr: { type: "button", "aria-label": "Stop generating" },
     });
+    setForgeIcon(this.cancelBtn, "x");
     this.cancelBtn.title = "Stop";
     this.cancelBtn.setAttribute("aria-label", "Stop generating");
     this.cancelBtn.addEventListener("click", () => {
@@ -449,16 +431,15 @@ export class ChatView extends ItemView {
 
     this.sendBtn = btnGroup.createEl("button", {
       cls: "forge-send-btn",
-      text: "↑",
+      attr: { type: "button", "aria-label": "Send message" },
     });
+    setForgeIcon(this.sendBtn, "arrow-up");
     this.sendBtn.title = "Send message";
     this.sendBtn.setAttribute("aria-label", "Send message");
     this.sendBtn.disabled = true;
     this.sendBtn.addEventListener("click", () => {
       void this.doSend();
     });
-
-    this.setupDictation();
 
     parent.createDiv({
       cls: "forge-composer-hint",
@@ -476,17 +457,18 @@ export class ChatView extends ItemView {
       const chip = this.attachmentsEl.createDiv({
         cls: "forge-attachment-chip",
       });
-      chip.createSpan({ cls: "forge-attachment-icon", text: "▧" });
+      const attachmentIcon = chip.createSpan({ cls: "forge-attachment-icon" });
+      setForgeIcon(attachmentIcon, "file-text");
       chip.createSpan({ cls: "forge-attachment-name", text: attachment.name });
 
       const remove = chip.createEl("button", {
         cls: "forge-attachment-remove",
-        text: "×",
         attr: {
           type: "button",
           "aria-label": `Remove ${attachment.name}`,
         },
       });
+      setForgeIcon(remove, "x");
       remove.addEventListener("click", () => {
         this.attachments.splice(index, 1);
         this.extraCtx = this.attachments.map((item) => item.context);
@@ -526,7 +508,7 @@ export class ChatView extends ItemView {
         key: command.kind,
         name: command.name,
         description: command.description,
-        icon: "/",
+        icon: "sparkles",
         action: { type: "learning" as const, kind: command.kind },
       }));
     }
@@ -540,7 +522,7 @@ export class ChatView extends ItemView {
         key: "current-selection",
         name: "Current selection",
         description: this.currentContext.selection.file,
-        icon: "✓",
+        icon: "check",
         disabled: true,
         action: { type: "info" },
       });
@@ -550,7 +532,7 @@ export class ChatView extends ItemView {
         name: this.currentContext.activeNote.path.split("/").pop() ??
           this.currentContext.activeNote.path,
         description: "Current note · automatic context",
-        icon: "✓",
+        icon: "file-text",
         disabled: true,
         action: { type: "info" },
       });
@@ -569,7 +551,7 @@ export class ChatView extends ItemView {
           key: `note:${note.path}`,
           name: note.name,
           description: note.path,
-          icon: "@",
+          icon: "file-text",
           action: { type: "vault-note", path: note.path },
         });
       }
@@ -579,7 +561,7 @@ export class ChatView extends ItemView {
       key: "attach",
       name: "Attach text file",
       description: "Markdown, text, CSV, JSON, or YAML",
-      icon: "＋",
+      icon: "paperclip",
       action: { type: "attach" },
     });
 
@@ -609,7 +591,8 @@ export class ChatView extends ItemView {
         attr: { type: "button" },
       });
       button.disabled = Boolean(item.disabled);
-      button.createSpan({ cls: "forge-prompt-menu-icon", text: item.icon });
+      const icon = button.createSpan({ cls: "forge-prompt-menu-icon" });
+      setForgeIcon(icon, item.icon);
       button.createSpan({ cls: "forge-prompt-menu-name", text: item.name });
       button.createSpan({ cls: "forge-prompt-menu-description", text: item.description });
 
@@ -677,70 +660,6 @@ export class ChatView extends ItemView {
     void this.renderPromptMenu();
   }
 
-  private setupDictation(): void {
-    const SpeechRecognition = (window as any).SpeechRecognition ??
-      (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      this.dictationBtn.disabled = true;
-      this.dictationBtn.title = "Dictation is unavailable in this environment";
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = navigator.language || "en-US";
-    recognition.onresult = (event: any) => {
-      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
-      if (transcript) {
-        this.input.value = `${this.input.value.trimEnd()}${this.input.value ? " " : ""}${transcript}`;
-        this.onInput();
-      }
-    };
-    recognition.onerror = () => {
-      this.dictationListening = false;
-      this.syncDictationButton();
-    };
-    recognition.onend = () => {
-      this.dictationListening = false;
-      this.syncDictationButton();
-    };
-    this.dictationRecognition = recognition;
-  }
-
-  private toggleDictation(): void {
-    if (!this.dictationRecognition) return;
-
-    if (this.dictationListening) {
-      this.dictationRecognition.stop();
-      return;
-    }
-
-    this.dictationListening = true;
-    this.syncDictationButton();
-    this.input.focus();
-    try {
-      this.dictationRecognition.start();
-    } catch {
-      this.dictationListening = false;
-      this.syncDictationButton();
-    }
-  }
-
-  private syncDictationButton(): void {
-    if (!this.dictationBtn) return;
-
-    this.dictationBtn.toggleClass("is-active", this.dictationListening);
-    this.dictationBtn.setAttribute("aria-pressed", String(this.dictationListening));
-    this.dictationBtn.setAttribute(
-      "aria-label",
-      this.dictationListening ? "Stop dictation" : "Start dictation",
-    );
-    this.dictationBtn.title = this.dictationListening ? "Stop dictation" : "Start dictation";
-    this.dictationBtn.textContent = this.dictationListening ? "◌" : "◉";
-  }
-
   private setAction(action: LearningActionKind): void {
     this.selectedAction = action;
     this.syncActionButtons();
@@ -772,9 +691,9 @@ export class ChatView extends ItemView {
 
     const remove = chip.createEl("button", {
       cls: "forge-intent-remove",
-      text: "×",
       attr: { type: "button", "aria-label": `Exit ${label} mode` },
     });
+    setForgeIcon(remove, "x");
     remove.addEventListener("click", () => {
       this.setAction("ask");
       this.input.focus();
@@ -813,23 +732,6 @@ export class ChatView extends ItemView {
       this.noteChip.title = activeNote.path;
     }
 
-    const basePath = context.selection?.file ?? activeNote?.path;
-    const baseName = basePath?.split("/").pop();
-    const primary = context.selection
-      ? `@${baseName ?? "selection"} · selection`
-      : activeNote
-        ? `@${baseName ?? "note"}`
-        : "No context";
-    const explicitCount = this.extraCtx.length;
-    this.contextSelect.textContent =
-      explicitCount > 0 ? `${primary} +${explicitCount}` : primary;
-
-    const details = [
-      basePath ? `Primary: ${basePath}` : "Primary: none",
-      ...this.extraCtx.map((item) => `Additional: ${item.file}`),
-      ...this.systemContextFiles.map((file) => `System: ${file}`),
-    ];
-    this.contextSelect.title = details.join("\n");
   }
 
   private onInput(): void {
@@ -893,7 +795,6 @@ export class ChatView extends ItemView {
 
     const explicitContext = this.extraCtx;
     this.closePromptMenu();
-    if (this.dictationListening) this.dictationRecognition?.stop?.();
 
     this.input.value = "";
     this.input.style.height = "";
@@ -1610,7 +1511,8 @@ export class ChatView extends ItemView {
     if (!topic) return;
     const open = gaps.filter((gap) => gap.status === "open").length;
     const row = this.thread.createDiv({ cls: "forge-progress-row" });
-    row.createSpan({ cls: "forge-progress-mark", text: "✓" });
+    const mark = row.createSpan({ cls: "forge-progress-mark" });
+    setForgeIcon(mark, "check");
     row.createSpan({
       cls: "forge-progress-text",
       text: open > 0
