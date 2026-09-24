@@ -185,6 +185,10 @@ export class ChatView extends ItemView {
       this.sc.destroy();
       this.setUIState("ANSWER");
       this.appendInlineError(this.thread, "Stopped.");
+      this.agyCursorEl?.removeClass("agy-bubble--streaming");
+      this.statusEl?.addClass("agy-hidden");
+      this.agyCursorEl = null;
+      this.statusEl = null;
     });
 
     this.sendBtn = btnGroup.createEl("button", {
@@ -230,15 +234,23 @@ export class ChatView extends ItemView {
     this.input.style.height = "";
     this.sendBtn.disabled = true;
 
+    // Reset per-turn bubble & status refs
+    this.agyCursorEl = null;
+    this.statusEl = null;
+
     this.appendUserBubble(prompt);
     this.setUIState("RUNNING");
     this.ensureAgyBubble();
 
-    const TIMEOUT_MS = 30_000;
+    const TIMEOUT_MS = 60_000;
     const timeout = window.setTimeout(() => {
       this.sc.destroy();
       this.setUIState("ANSWER");
-      this.appendInlineError(this.thread, "No response after 30 s. AGY may be busy.");
+      this.agyCursorEl?.removeClass("agy-bubble--streaming");
+      this.statusEl?.addClass("agy-hidden");
+      this.agyCursorEl = null;
+      this.statusEl = null;
+      this.appendInlineError(this.thread, "No response after 60 s. AGY may be busy.");
     }, TIMEOUT_MS);
 
     try {
@@ -292,6 +304,8 @@ export class ChatView extends ItemView {
           if ((this.uiState as UIState) === "RUNNING") this.setUIState("ANSWER");
           this.agyCursorEl?.removeClass("agy-bubble--streaming");
           this.statusEl?.addClass("agy-hidden");
+          this.agyCursorEl = null;
+          this.statusEl = null;
         }
 
         if (event.type === "error") {
@@ -300,10 +314,16 @@ export class ChatView extends ItemView {
           this.statusEl?.addClass("agy-hidden");
           this.appendInlineError(this.thread, event.error);
           this.setUIState("ANSWER");
+          this.agyCursorEl = null;
+          this.statusEl = null;
         }
       }
     } catch (err) {
       window.clearTimeout(timeout);
+      this.agyCursorEl?.removeClass("agy-bubble--streaming");
+      this.statusEl?.addClass("agy-hidden");
+      this.agyCursorEl = null;
+      this.statusEl = null;
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("not found") || msg.includes("ENOENT")) {
         this.showError("AGY CLI not found. Make sure 'agy' is in PATH.");
