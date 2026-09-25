@@ -25,6 +25,7 @@ import {
   parsePromptToken,
   PromptMenuKind,
 } from "./prompt-token";
+import { NOX_CAPABILITIES } from "./capabilities";
 
 export const NOX_VIEW_TYPE = "nox-sidebar";
 
@@ -41,22 +42,21 @@ const ACTIONS: Array<{
   label: string;
 }> = [
   { kind: "ask", label: "Ask" },
-  { kind: "explain", label: "Explain" },
-  { kind: "practice", label: "Practice" },
-  { kind: "review", label: "Review" },
-  { kind: "edit", label: "Edit" },
+  ...NOX_CAPABILITIES.map((capability) => ({
+    kind: capability.action,
+    label: capability.title,
+  })),
 ];
 
 const PROMPT_COMMANDS: Array<{
   kind: Exclude<LearningActionKind, "ask">;
   name: string;
   description: string;
-}> = [
-  { kind: "explain", name: "Explain", description: "Break down the current concept" },
-  { kind: "practice", name: "Practice", description: "Start active recall" },
-  { kind: "review", name: "Review", description: "Find important learning gaps" },
-  { kind: "edit", name: "Edit", description: "Improve the current note safely" },
-];
+}> = NOX_CAPABILITIES.map((capability) => ({
+  kind: capability.action,
+  name: capability.title,
+  description: capability.description,
+}));
 
 type PromptMenuAction =
   | { type: "attach" }
@@ -392,6 +392,33 @@ export class ChatView extends ItemView {
 
     const tools = footer.createDiv({ cls: "nox-composer-tools" });
 
+    const actionMenuBtn = tools.createEl("button", {
+      cls: "nox-action-menu-btn",
+      attr: {
+        type: "button",
+        "aria-label": "Show Nox actions",
+        "aria-expanded": "false",
+      },
+    });
+    actionMenuBtn.createSpan({
+      cls: "nox-action-menu-key",
+      text: "/",
+    });
+    actionMenuBtn.createSpan({
+      text: "Actions",
+    });
+    actionMenuBtn.addEventListener("click", () => {
+      this.promptMenu =
+        this.promptMenu === "command" ? null : "command";
+      this.promptMenuActive = 0;
+      actionMenuBtn.setAttribute(
+        "aria-expanded",
+        String(this.promptMenu === "command"),
+      );
+      void this.renderPromptMenu();
+      this.input.focus();
+    });
+
     this.modelSelect = tools.createEl("select", {
       cls: "nox-model-select",
     });
@@ -434,10 +461,6 @@ export class ChatView extends ItemView {
       void this.doSend();
     });
 
-    parent.createDiv({
-      cls: "nox-composer-hint",
-      text: "Enter to send · Shift + Enter for a new line",
-    });
   }
 
   private renderAttachments(): void {
@@ -712,12 +735,29 @@ export class ChatView extends ItemView {
   }
 
   private updatePlaceholder(): void {
+    const hasSelection = Boolean(this.currentContext?.selection);
+    const hasNote = Boolean(this.currentContext?.activeNote);
+
+    const askPlaceholder = hasSelection
+      ? "Ask about this selection..."
+      : hasNote
+        ? "Ask about this note..."
+        : "Ask Nox...";
+
     const placeholders: Record<LearningActionKind, string> = {
-      ask: "Ask anything about this note...",
-      explain: "What should I explain?",
-      practice: "What should we practice?",
-      review: "What should I review?",
-      edit: "How should I improve this note?",
+      ask: askPlaceholder,
+      explain: hasSelection
+        ? "What should I explain about this selection?"
+        : "What should I explain?",
+      practice: hasSelection
+        ? "Practice this selection..."
+        : "What should we practice?",
+      review: hasNote
+        ? "What should I review in this note?"
+        : "What should I review?",
+      edit: hasNote
+        ? "How should I improve this note?"
+        : "What should I improve?",
     };
 
     if (this.input) {
@@ -743,6 +783,14 @@ export class ChatView extends ItemView {
       this.noteChip.title = activeNote.path;
     }
 
+    this.updatePlaceholder();
+
+    if (
+      this.uiState === "EMPTY" &&
+      this.thread.querySelector(".nox-empty-slate")
+    ) {
+      this.showEmpty();
+    }
   }
 
   private onInput(): void {
@@ -1073,43 +1121,138 @@ export class ChatView extends ItemView {
     const slate = this.thread.createDiv({
       cls: "nox-empty-slate",
     });
-    slate.createEl("img", {
-      cls: "nox-empty-logo",
+
+    this.renderEmptyContext(slate);
+
+    const intro = slate.createDiv({
+      cls: "nox-empty-intro",
+    });
+    intro.createDiv({
+      cls: "nox-empty-title",
+      text: "What do you want to work on?",
+    });
+    intro.createDiv({
+      cls: "nox-empty-description",
+      text:
+        "Choose a focused action for the current note, or ask Nox directly.",
+    });
+
+    const section = slate.createDiv({
+      cls: "nox-capability-section",
+    });
+    const sectionHead = section.createDiv({
+      cls: "nox-capability-header",
+    });
+    sectionHead.createSpan({
+      cls: "nox-capability-label",
+      text: "Focused actions",
+    });
+
+    const commandHint = sectionHead.createEl("button", {
+      cls: "nox-capability-command-hint",
+      text: "Type / to see all actions",
       attr: {
-        src: this.getLogoUrl(),
-        alt: "Nox",
+        type: "button",
+        "aria-label": "Show all Nox actions",
       },
     });
-    const label = "What are you learning?";
-
-    slate.createDiv({
-      cls: "nox-empty-label",
-      text: label,
-    });
-    slate.createDiv({
-      cls: "nox-empty-hint",
-      text: "Ask about the current note, or jump into a focused workflow when you need more than chat.",
+    commandHint.addEventListener("click", () => {
+      this.promptMenu = "command";
+      this.promptMenuActive = 0;
+      void this.renderPromptMenu();
+      this.focusComposer();
     });
 
-    const quickActions = slate.createDiv({ cls: "nox-empty-actions" });
-    const quickActionMap: Array<[LearningActionKind, string]> = [
-      ["explain", "Explain this"],
-      ["practice", "Practice"],
-      ["edit", "Improve note"],
-    ];
-    for (const [action, text] of quickActionMap) {
-      const button = quickActions.createEl("button", {
-        cls: "nox-empty-action",
-        text,
-        attr: { type: "button" },
+    const grid = section.createDiv({
+      cls: "nox-capability-grid",
+    });
+
+    for (const capability of NOX_CAPABILITIES) {
+      const card = grid.createEl("button", {
+        cls:
+          `nox-capability-card ` +
+          `nox-capability-card--${capability.tone}`,
+        attr: {
+          type: "button",
+          "aria-label": capability.title,
+        },
       });
-      button.addEventListener("click", () => {
-        this.setAction(action);
+
+      const top = card.createDiv({
+        cls: "nox-capability-card-top",
+      });
+      const name = top.createDiv({
+        cls: "nox-capability-name",
+      });
+      const icon = name.createSpan({
+        cls: "nox-capability-icon",
+      });
+      setNoxIcon(icon, capability.icon as IconName);
+      name.createSpan({
+        cls: "nox-capability-title",
+        text: capability.title,
+      });
+      top.createSpan({
+        cls: "nox-capability-command",
+        text: capability.command,
+      });
+
+      card.createDiv({
+        cls: "nox-capability-description",
+        text: capability.description,
+      });
+      card.createSpan({
+        cls: "nox-capability-meta",
+        text: capability.meta,
+      });
+
+      card.addEventListener("click", () => {
+        this.setAction(capability.action);
         this.focusComposer();
       });
     }
 
     this.setUIState("EMPTY");
+  }
+
+  private renderEmptyContext(parent: HTMLElement): void {
+    const context = this.currentContext;
+    if (!context?.selection && !context?.activeNote) return;
+
+    const wrap = parent.createDiv({
+      cls: "nox-empty-context",
+    });
+    const left = wrap.createDiv({
+      cls: "nox-empty-context-main",
+    });
+    const icon = left.createSpan({
+      cls: "nox-empty-context-icon",
+    });
+    setNoxIcon(icon, "file-text");
+
+    const copy = left.createDiv({
+      cls: "nox-empty-context-copy",
+    });
+    copy.createSpan({
+      cls: "nox-empty-context-label",
+      text: "Current context",
+    });
+
+    const file =
+      context.selection?.file ??
+      context.activeNote?.path ??
+      "";
+    copy.createSpan({
+      cls: "nox-empty-context-file",
+      text: file.split("/").pop() ?? file,
+    });
+
+    if (context.selection) {
+      wrap.createSpan({
+        cls: "nox-empty-context-meta",
+        text: "Selection",
+      });
+    }
   }
 
   private async restoreSession(): Promise<void> {

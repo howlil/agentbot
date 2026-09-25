@@ -1401,22 +1401,45 @@
   }
 }
 
-/* ── Nox workspace composition ──────────────────────────────────────────
- * The empty surface is the product entry point. Keep the visual language
- * quiet and let the composer carry the primary interaction.
+/* ── Nox workspace composition v2 ───────────────────────────────────────
+ * Information graph:
+ * context -> focused capability -> intent -> composer.
+ * The workspace stays fully white. Controlled gradients live only inside
+ * capability cards and never become a decorative page background.
  */
-.nox-root {
+.nox-root,
+.theme-dark .nox-root {
+  --nox-page: #ffffff;
+  --nox-canvas: #ffffff;
+  --nox-surface: #ffffff;
+  --nox-inset: #fafafa;
+  --nox-hover: #f5f5f5;
+  --nox-hover-2: #eeeeee;
+  --nox-ink: #292929;
+  --nox-ink-2: #5d5d5d;
+  --nox-ink-3: #7f7f7f;
+  --nox-line: #e8e8ed;
+  --nox-line-strong: #dadbe2;
+  --nox-line-soft: #f1f1f3;
+  --nox-field: #ffffff;
+  --nox-accent: #6f4df6;
+  --nox-accent-ink: #5d3ee4;
+  --nox-accent-soft: #f3efff;
+  --nox-accent-border: #d9d0ff;
+  --nox-accent-tint: #f3efff;
+
   margin: 0;
-  border: 1px solid var(--nox-line);
-  border-radius: var(--nox-radius-window);
-  background: var(--nox-surface);
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--nox-ink);
 }
 
 .nox-header {
-  min-height: 58px;
-  padding: 10px 12px;
-  border-bottom-color: var(--nox-line);
-  background: var(--nox-surface);
+  min-height: 54px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--nox-line);
+  background: #ffffff;
 }
 
 .nox-header-brand {
@@ -1424,15 +1447,15 @@
 }
 
 .nox-header-logo {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--nox-radius-control);
 }
 
 .nox-header-title {
   font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .nox-header-right {
@@ -1448,13 +1471,8 @@
   background: transparent;
   color: var(--nox-ink-2);
   box-shadow: none;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
-}
-
-.nox-more-btn {
-  font-size: 18px;
-  letter-spacing: 2px;
 }
 
 .nox-new-btn:hover,
@@ -1467,69 +1485,306 @@
 
 .nox-thread {
   gap: 8px;
-  padding: 10px 12px 12px;
-  background: var(--nox-surface);
+  padding: 16px 14px 22px;
+  background: #ffffff;
 }
 
 .nox-empty-slate {
-  gap: 8px;
+  display: flex;
+  width: min(560px, 100%);
   min-height: 0;
-  margin: auto;
-  padding: 32px 24px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 16px;
+  margin: 28px auto 0;
+  padding: 0;
+  text-align: left;
 }
 
-.nox-empty-logo {
-  width: 42px;
-  height: 42px;
-  margin-bottom: 4px;
-  border-radius: var(--nox-radius-window);
-  object-fit: cover;
+.nox-empty-context {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--nox-line);
+  border-radius: 10px;
+  background: #ffffff;
 }
 
-.nox-empty-label {
-  max-width: 360px;
-  font-size: 21px;
+.nox-empty-context-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.nox-empty-context-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ece7ff;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #faf8ff 0%, #f1edff 100%);
+  color: #6344df;
+}
+
+.nox-empty-context-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nox-empty-context-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nox-empty-context-label,
+.nox-empty-context-meta {
+  color: var(--nox-ink-3);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.nox-empty-context-file {
+  overflow: hidden;
+  color: var(--nox-ink);
+  font-size: 13px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nox-empty-context-meta {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.nox-empty-intro {
+  padding: 0 1px;
+}
+
+.nox-empty-title {
+  margin: 0 0 4px;
+  color: var(--nox-ink);
+  font-size: 18px;
+  font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.3;
 }
 
-.nox-empty-hint {
-  max-width: 340px;
+.nox-empty-description {
+  max-width: 440px;
+  color: var(--nox-ink-2);
   font-size: 13px;
   line-height: 1.5;
 }
 
-.nox-empty-actions {
+.nox-capability-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.nox-capability-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 1px;
 }
 
-.nox-empty-action {
-  min-height: 28px;
-  padding: 5px 10px;
-  border: 1px solid var(--nox-line-strong);
-  border-radius: var(--nox-radius-pill);
-  background: var(--nox-surface);
-  color: var(--nox-ink-2);
+.nox-capability-label {
+  color: var(--nox-ink-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.nox-capability-command-hint {
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--nox-ink-3);
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: 11px;
+  box-shadow: none;
 }
 
-.nox-empty-action:hover,
-.nox-empty-action:focus-visible {
-  border-color: var(--nox-accent-border);
-  background: var(--nox-accent-tint);
+.nox-capability-command-hint:hover,
+.nox-capability-command-hint:focus-visible {
+  color: var(--nox-accent-ink);
+}
+
+.nox-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nox-capability-card {
+  position: relative;
+  min-height: 96px;
+  overflow: hidden;
+  padding: 11px 12px;
+  border: 1px solid var(--nox-line);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: none;
+  transition:
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.nox-capability-card:hover,
+.nox-capability-card:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--nox-line-strong);
+}
+
+.nox-capability-card::before {
+  position: absolute;
+  right: -30px;
+  bottom: -30px;
+  width: 135px;
+  height: 135px;
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.nox-capability-card--purple {
+  border-color: #e1dbff;
+  background: linear-gradient(135deg, #ffffff 0%, #faf8ff 54%, #f4f0ff 100%);
+}
+
+.nox-capability-card--purple::before {
+  background: radial-gradient(
+    circle,
+    rgba(120, 91, 255, 0.14) 0%,
+    rgba(120, 91, 255, 0.06) 40%,
+    transparent 70%
+  );
+}
+
+.nox-capability-card--blue {
+  border-color: #dae9ff;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 52%, #eef6ff 100%);
+}
+
+.nox-capability-card--blue::before {
+  background: radial-gradient(
+    circle,
+    rgba(85, 153, 255, 0.14) 0%,
+    rgba(85, 153, 255, 0.06) 40%,
+    transparent 70%
+  );
+}
+
+.nox-capability-card--coral {
+  border-color: #ffe3da;
+  background: linear-gradient(135deg, #ffffff 0%, #fffaf8 52%, #fff2ed 100%);
+}
+
+.nox-capability-card--coral::before {
+  background: radial-gradient(
+    circle,
+    rgba(255, 137, 94, 0.13) 0%,
+    rgba(255, 137, 94, 0.05) 40%,
+    transparent 70%
+  );
+}
+
+.nox-capability-card--green {
+  border-color: #dcefe0;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fdf9 52%, #eef9f0 100%);
+}
+
+.nox-capability-card--green::before {
+  background: radial-gradient(
+    circle,
+    rgba(71, 180, 96, 0.13) 0%,
+    rgba(71, 180, 96, 0.05) 40%,
+    transparent 70%
+  );
+}
+
+.nox-capability-card-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.nox-capability-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.nox-capability-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nox-ink-2);
+}
+
+.nox-capability-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nox-capability-title {
   color: var(--nox-ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.nox-capability-command {
+  color: var(--nox-ink-3);
+  font-family: var(--font-monospace), ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.nox-capability-description {
+  position: relative;
+  z-index: 1;
+  max-width: 210px;
+  color: var(--nox-ink-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.nox-capability-meta {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  margin-top: 11px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--nox-radius-pill);
+  background: rgba(255, 255, 255, 0.64);
+  color: var(--nox-ink-3);
+  font-size: 10px;
 }
 
 .nox-composer {
   padding: 10px 12px 12px;
-  border-top-color: var(--nox-line);
-  background: var(--nox-canvas);
+  border-top: 1px solid var(--nox-line);
+  background: #ffffff;
 }
 
 .nox-context-row {
@@ -1539,9 +1794,15 @@
 .nox-composer-box {
   gap: 6px;
   padding: 8px;
-  border-radius: var(--nox-radius-card);
-  background: var(--nox-surface);
+  border: 1px solid var(--nox-line-strong);
+  border-radius: 14px;
+  background: #ffffff;
   box-shadow: none;
+}
+
+.nox-composer-box:focus-within {
+  border-color: var(--nox-accent-border);
+  box-shadow: 0 0 0 3px rgba(111, 77, 246, 0.05);
 }
 
 .nox-composer-controls {
@@ -1566,44 +1827,59 @@
 }
 
 .nox-composer-tools {
+  display: flex;
+  min-width: 0;
   flex: 1;
+  align-items: center;
   gap: 4px;
+}
+
+.nox-action-menu-btn {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nox-accent-ink);
+  cursor: pointer;
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.nox-action-menu-btn:hover,
+.nox-action-menu-btn:focus-visible {
+  background: #f5f2ff;
+}
+
+.nox-action-menu-key {
+  font-family: var(--font-monospace), ui-monospace, monospace;
 }
 
 .nox-composer-tools .nox-model-select {
   display: inline-flex;
-  align-items: center;
+  width: 150px;
+  max-width: 150px;
   height: 28px;
   min-width: 0;
-  max-width: 190px;
-  padding: 0 10px;
+  padding: 0 24px 0 8px;
   overflow: hidden;
-  border: 1px solid var(--nox-line);
+  border: 0;
   border-radius: var(--nox-radius-control);
-  background: var(--nox-surface);
+  background: transparent;
   color: var(--nox-ink-2);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .nox-composer-tools .nox-model-select:hover,
 .nox-composer-tools .nox-model-select:focus-visible {
-  border-color: var(--nox-line-strong);
   background: var(--nox-hover);
   color: var(--nox-ink);
-}
-
-.nox-composer-tools .nox-model-select {
-  width: 190px;
-  max-width: 190px;
-  height: 28px;
-  padding: 0 25px 0 10px;
-  border: 1px solid var(--nox-line);
-  border-radius: var(--nox-radius-control);
-  background: var(--nox-surface);
-  font-size: 12px;
 }
 
 .nox-send-btn,
@@ -1620,19 +1896,13 @@
 }
 
 .nox-send-btn:not(:disabled) {
-  background: var(--nox-accent);
-  color: var(--text-on-accent);
+  background: var(--nox-ink);
+  color: #ffffff;
 }
 
 .nox-send-btn:not(:disabled):hover,
 .nox-send-btn:not(:disabled):focus-visible {
-  filter: brightness(1.05);
-}
-
-.nox-composer-hint {
-  margin-top: 5px;
-  padding-right: 0;
-  font-size: 10px;
+  background: var(--nox-accent);
 }
 
 @media (max-width: 600px) {
@@ -1644,38 +1914,23 @@
     padding-inline: 10px;
   }
 
+  .nox-empty-slate {
+    margin-top: 14px;
+  }
+
+  .nox-capability-grid {
+    grid-template-columns: 1fr;
+  }
+
   .nox-composer {
     padding-inline: 9px;
   }
 
-  .nox-empty-label {
-    font-size: 19px;
-  }
-
-  .nox-empty-hint {
-    font-size: 12px;
-  }
-
-  .nox-empty-actions {
-    flex-wrap: wrap;
-  }
-
-  .nox-empty-action {
-    min-height: 28px;
-    padding-inline: 10px;
-    font-size: 12px;
-  }
-
   .nox-composer-tools .nox-model-select {
-    max-width: 45%;
-    font-size: 11px;
-  }
-
-  .nox-composer-tools .nox-model-select {
-    width: 45%;
+    width: 118px;
+    max-width: 118px;
   }
 }
-
 
 /* ── Nox conversation + learning object system v1 ──────────────────────── */
 .nox-bubble--user {
