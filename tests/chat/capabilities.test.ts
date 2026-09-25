@@ -44,3 +44,15 @@ test("capability entry surface has no separate learn mode", () => {
     false,
   );
 });
+
+test("capability icons remain the shared visual source of truth", () => {
+  assert.deepEqual(
+    NOX_CAPABILITIES.map((item) => [item.action, item.icon]),
+    [
+      ["explain", "circle-help"],
+      ["practice", "list-checks"],
+      ["review", "search"],
+      ["edit", "pencil"],
+    ],
+  );
+});

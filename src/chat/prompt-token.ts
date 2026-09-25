@@ -18,3 +18,8 @@ export function parsePromptToken(
     start: match.index + match[1].length,
   };
 }
+
+export function stripPromptToken(value: string): string {
+  const token = parsePromptToken(value);
+  return token ? value.slice(0, token.start) : value;
+}

@@ -9,6 +9,7 @@ import { LearningController } from "../learning/LearningController";
 import {
   LearningActionKind,
   LearningEvent,
+  LearningRequest,
 } from "../learning/learning-types";
 import {
   ExplicitContextRef,
@@ -19,13 +20,20 @@ import {
   PracticeQuestion,
 } from "../learning/practice-types";
 import { ReviewFinding } from "../learning/review-types";
-import { ChatMessage, EditProposal } from "../types";
+import { ChatMessage, EditProposal, type AgentModel } from "../types";
 import { ProposedEdit } from "../learning/learning-types";
 import {
   parsePromptToken,
   PromptMenuKind,
+  stripPromptToken,
 } from "./prompt-token";
 import { NOX_CAPABILITIES } from "./capabilities";
+import { animateNoxEnter, animateNoxPopover } from "./motion";
+import {
+  hasInspectableContext,
+  shouldResetAction,
+  TerminalOutcome,
+} from "./chat-state";
 
 export const NOX_VIEW_TYPE = "nox-sidebar";
 
@@ -48,15 +56,7 @@ const ACTIONS: Array<{
   })),
 ];
 
-const PROMPT_COMMANDS: Array<{
-  kind: Exclude<LearningActionKind, "ask">;
-  name: string;
-  description: string;
-}> = NOX_CAPABILITIES.map((capability) => ({
-  kind: capability.action,
-  name: capability.title,
-  description: capability.description,
-}));
+const PROMPT_COMMANDS = NOX_CAPABILITIES;
 
 type PromptMenuAction =
   | { type: "attach" }
@@ -76,6 +76,18 @@ interface PromptMenuItem {
 function setNoxIcon(element: HTMLElement, icon: IconName): void {
   element.empty();
   setIcon(element, icon);
+
+  const svg = element.querySelector<SVGElement>("svg");
+  if (!svg) return;
+
+  svg.classList.add("nox-icon");
+  svg.setAttribute("width", "15");
+  svg.setAttribute("height", "15");
+  svg.style.setProperty("width", "15px", "important");
+  svg.style.setProperty("height", "15px", "important");
+  svg.style.setProperty("min-width", "15px", "important");
+  svg.style.setProperty("min-height", "15px", "important");
+  svg.style.setProperty("display", "block", "important");
 }
 
 export class ChatView extends ItemView {
@@ -89,9 +101,16 @@ export class ChatView extends ItemView {
   private noteChip!: HTMLElement;
   private systemChip!: HTMLElement;
   private cancelBtn!: HTMLButtonElement;
-  private modelSelect!: HTMLSelectElement;
+  private modelTrigger!: HTMLButtonElement;
+  private modelMenuEl: HTMLElement | null = null;
+  private modelMenuOpen = false;
+  private modelMenuActive = 0;
+  private modelMenuRows: HTMLButtonElement[] = [];
+  private models: AgentModel[] = [];
   private fileInput!: HTMLInputElement;
   private promptPlusBtn!: HTMLButtonElement;
+  private actionMenuBtn!: HTMLButtonElement;
+  private contextRow!: HTMLElement;
   private attachmentsEl: HTMLElement | null = null;
   private intentEl: HTMLElement | null = null;
   private promptMenuEl: HTMLElement | null = null;
@@ -115,8 +134,6 @@ export class ChatView extends ItemView {
   private thinkingChevronEl: HTMLElement | null = null;
   private thinkingPanelEl: HTMLElement | null = null;
   private thinkingRows: HTMLElement[] = [];
-  private thinkingStageTimer: number | null = null;
-  private thinkingStage = 0;
   private thinkingManualExpanded: boolean | null = null;
   private streamedResponseText = "";
   private streamingPendingText = "";
@@ -125,8 +142,11 @@ export class ChatView extends ItemView {
   private uiState: UIState = "EMPTY";
   private selectedAction: LearningActionKind = "ask";
   private runningAction: LearningActionKind | null = null;
-  private actionButtons = new Map<LearningActionKind, HTMLButtonElement>();
+  private capabilityCards = new Map<LearningActionKind, HTMLButtonElement>();
   private systemContextFiles: string[] = [];
+  private lastTurnRequest: LearningRequest | null = null;
+  private turnTerminal = false;
+  private workspaceEventsRegistered = false;
 
   private extraCtx: ExplicitContextRef[] = [];
   private currentContext: LearningContext | null = null;
@@ -162,38 +182,55 @@ export class ChatView extends ItemView {
     this.composer = root.createDiv({ cls: "nox-composer" });
     this.buildComposer(this.composer);
 
-    try {
-      const health = await this.learning.checkRuntime();
-      if (health.status !== "ready") {
-        this.showError(health.failure.message);
-        return;
-      }
-    } catch {
-      this.showError("Agent runtime is unavailable. Check Nox runtime settings.");
-      return;
-    }
-
-    await this.syncChips();
-    await this.restoreSession();
-
-    this.registerEvent(
-      this.app.workspace.on("active-leaf-change", () => {
-        void this.syncChips();
-      }),
-    );
-    this.registerEvent(
-      this.app.workspace.on("editor-selection-change" as any, () => {
-        void this.syncChips();
-      }),
-    );
-
-    void this.refreshModelList();
+    if (!(await this.ensureRuntimeReady())) return;
+    await this.restoreRuntimeState();
   }
 
   async onClose(): Promise<void> {
     this.learning.cancel();
-    this.stopThinkingSequence();
     this.stopLoadingTimer();
+  }
+
+  private async ensureRuntimeReady(): Promise<boolean> {
+    try {
+      const health = await this.learning.checkRuntime();
+      if (health.status === "ready") return true;
+
+      this.showError(health.failure.message);
+    } catch {
+      this.showError("Agent runtime is unavailable. Check Nox runtime settings.");
+    }
+
+    return false;
+  }
+
+  private async restoreRuntimeState(): Promise<void> {
+    await this.syncChips();
+    await this.restoreSession();
+
+    if (!this.workspaceEventsRegistered) {
+      this.workspaceEventsRegistered = true;
+      this.registerEvent(
+        this.app.workspace.on("active-leaf-change", () => {
+          void this.syncChips();
+        }),
+      );
+      this.registerEvent(
+        this.app.workspace.on("editor-selection-change" as any, () => {
+          void this.syncChips();
+        }),
+      );
+    }
+
+    void this.refreshModelList();
+  }
+
+  private async retryRuntime(): Promise<void> {
+    if (this.uiState === "RUNNING") return;
+
+    if (!(await this.ensureRuntimeReady())) return;
+    await this.restoreRuntimeState();
+    this.focusComposer();
   }
 
   focusComposer(): void {
@@ -227,14 +264,30 @@ export class ChatView extends ItemView {
     setNoxIcon(newBtn, "plus");
     newBtn.title = "New learning session";
     newBtn.addEventListener("click", async () => {
-      await this.learning.newSession();
-      this.extraCtx = [];
-      this.attachments = [];
-      this.renderAttachments();
-      this.closePromptMenu();
-      this.setAction("ask");
-      await this.syncChips();
-      this.showEmpty();
+      try {
+        await this.learning.newSession();
+        this.lastTurnRequest = null;
+        this.systemContextFiles = [];
+        this.extraCtx = [];
+        this.attachments = [];
+        this.renderAttachments();
+        this.closePromptMenu();
+        this.closeModelMenu();
+        this.setAction("ask");
+        await this.syncChips();
+        this.showEmpty();
+        this.focusComposer();
+      } catch (error) {
+        console.warn(
+          "[Nox] Could not start a new session",
+          error instanceof Error ? error.message : String(error),
+        );
+        this.appendInlineStatus(
+          this.thread,
+          "failed",
+          "Could not start a new session.",
+        );
+      }
     });
 
     const moreBtn = right.createEl("button", {
@@ -249,56 +302,172 @@ export class ChatView extends ItemView {
     moreBtn.addEventListener("click", () => this.openSettings());
   }
 
-  private buildActionButtons(parent: HTMLElement): void {
-    for (const action of ACTIONS) {
-      const button = parent.createEl("button", {
-        cls: "nox-action-btn",
-        text: action.label,
-      });
-      button.type = "button";
-      button.setAttribute("aria-label", `Use ${action.label} mode`);
-      button.title = `${action.label} mode`;
-      button.addEventListener("click", () => {
-        this.selectedAction = action.kind;
-        this.syncActionButtons();
-        this.updatePlaceholder();
-      });
-      this.actionButtons.set(action.kind, button);
-    }
-
-    this.syncActionButtons();
+  private async refreshModelList(): Promise<void> {
+    this.models = this.learning.getModels();
+    if (this.modelMenuOpen) this.modelMenuActive = this.getSelectedModelIndex();
+    this.syncModelTrigger();
+    this.renderModelMenu();
   }
 
-  private async refreshModelList(): Promise<void> {
-    let models = this.learning.getModels();
+  private getModelMenuItems(): AgentModel[] {
+    return [
+      { id: "", name: "Runtime default" },
+      ...this.models,
+    ];
+  }
 
-    this.modelSelect.empty();
-    const currentModel = this.learning.getSession().model;
+  private getSelectedModelIndex(): number {
+    const selected = this.learning.getSession().model ?? "";
+    const index = this.getModelMenuItems().findIndex(
+      (model) => model.id === selected,
+    );
+    return index >= 0 ? index : 0;
+  }
 
-    const defaultOption = this.modelSelect.createEl("option", {
-      value: "",
-      text: "Runtime default",
+  private syncModelTrigger(): void {
+    if (!this.modelTrigger) return;
+
+    const selected = this.learning.getSession().model ?? "";
+    const model = this.getModelMenuItems().find((item) => item.id === selected);
+    const label = model?.name ?? "Runtime default";
+
+    this.modelTrigger.empty();
+    this.modelTrigger.createSpan({
+      cls: "nox-model-trigger-label",
+      text: label,
     });
-    defaultOption.selected = !currentModel;
+    const chevron = this.modelTrigger.createSpan({
+      cls: "nox-model-trigger-chevron",
+    });
+    setNoxIcon(chevron, "chevron-down");
+    this.modelTrigger.setAttribute("aria-expanded", String(this.modelMenuOpen));
+    this.modelTrigger.setAttribute("aria-label", `Learning model: ${label}`);
+  }
 
-    for (const model of models) {
-      const option = this.modelSelect.createEl("option", {
-        value: model.id,
+  private openModelMenu(): void {
+    this.closePromptMenu();
+    this.modelMenuOpen = true;
+    this.modelMenuActive = this.getSelectedModelIndex();
+    this.syncModelTrigger();
+    this.renderModelMenu();
+  }
+
+  private closeModelMenu(): void {
+    if (!this.modelMenuOpen && this.modelMenuRows.length === 0) return;
+
+    this.modelMenuOpen = false;
+    this.modelMenuActive = 0;
+    this.modelMenuRows = [];
+    this.syncModelTrigger();
+    this.renderModelMenu();
+  }
+
+  private toggleModelMenu(): void {
+    if (this.modelMenuOpen) {
+      this.closeModelMenu();
+    } else {
+      this.openModelMenu();
+    }
+  }
+
+  private renderModelMenu(): void {
+    if (!this.modelMenuEl) return;
+
+    this.modelMenuEl.empty();
+    this.modelMenuRows = [];
+    this.modelMenuEl.toggleClass("nox-hidden", !this.modelMenuOpen);
+    this.syncModelTrigger();
+
+    if (!this.modelMenuOpen) return;
+
+    const selected = this.learning.getSession().model ?? "";
+    for (const [index, model] of this.getModelMenuItems().entries()) {
+      const row = this.modelMenuEl.createEl("button", {
+        cls: `nox-model-menu-row${index === this.modelMenuActive ? " is-active" : ""}`,
+        attr: {
+          type: "button",
+          role: "option",
+          "aria-selected": String(model.id === selected),
+        },
+      });
+      row.createSpan({
+        cls: "nox-model-menu-name",
         text: model.name,
       });
+      const check = row.createSpan({ cls: "nox-model-menu-check" });
+      if (model.id === selected) setNoxIcon(check, "check");
 
-      if (model.id === currentModel) option.selected = true;
+      row.addEventListener("mouseenter", () => {
+        this.modelMenuActive = index;
+        this.syncModelMenuRows();
+      });
+      row.addEventListener("click", () => this.selectModel(model.id));
+      this.modelMenuRows.push(row);
+    }
+
+    animateNoxPopover(this.modelMenuEl);
+  }
+
+  private syncModelMenuRows(): void {
+    const selected = this.learning.getSession().model ?? "";
+    this.modelMenuRows.forEach((row, index) => {
+      row.toggleClass("is-active", index === this.modelMenuActive);
+      row.setAttribute(
+        "aria-selected",
+        String(this.getModelMenuItems()[index]?.id === selected),
+      );
+    });
+  }
+
+  private selectModel(modelId: string): void {
+    this.learning.setModel(modelId || undefined);
+    this.closeModelMenu();
+    this.modelTrigger.focus();
+  }
+
+  private onModelTriggerKey(event: KeyboardEvent): void {
+    const items = this.getModelMenuItems();
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!this.modelMenuOpen) {
+        this.openModelMenu();
+        return;
+      }
+
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      this.modelMenuActive =
+        (this.modelMenuActive + direction + items.length) % items.length;
+      this.syncModelMenuRows();
+      return;
+    }
+
+    if ((event.key === "Enter" || event.key === " ") && this.modelMenuOpen) {
+      event.preventDefault();
+      const model = items[this.modelMenuActive];
+      if (model) this.selectModel(model.id);
+      return;
+    }
+
+    if (event.key === "Escape" && this.modelMenuOpen) {
+      event.preventDefault();
+      this.closeModelMenu();
+      return;
+    }
+
+    if (event.key === "Tab" && this.modelMenuOpen) {
+      this.closeModelMenu();
     }
   }
 
   private buildComposer(parent: HTMLElement): void {
-    const contextRow = parent.createDiv({ cls: "nox-context-row" });
-    contextRow.createSpan({
+    this.contextRow = parent.createDiv({ cls: "nox-context-row nox-hidden" });
+    this.contextRow.createSpan({
       cls: "nox-context-label",
       text: "Using",
     });
 
-    const chips = contextRow.createDiv({ cls: "nox-chips" });
+    const chips = this.contextRow.createDiv({ cls: "nox-chips" });
 
     this.selectionChip = chips.createSpan({
       cls: "nox-chip nox-chip--hidden",
@@ -331,13 +500,29 @@ export class ChatView extends ItemView {
     this.promptMenuEl = anchor.createDiv({
       cls: "nox-prompt-menu nox-hidden",
     });
+    this.promptMenuEl.id = "nox-prompt-menu";
+    this.promptMenuEl.setAttribute("role", "listbox");
+    this.promptMenuEl.setAttribute("aria-label", "Nox prompt actions");
+
+    this.modelMenuEl = anchor.createDiv({
+      cls: "nox-model-menu nox-hidden",
+    });
+    this.modelMenuEl.id = "nox-model-menu";
+    this.modelMenuEl.setAttribute("role", "listbox");
+    this.modelMenuEl.setAttribute("aria-label", "Learning models");
+
+    this.registerDomEvent(document, "pointerdown", (event) => {
+      const target = event.target;
+      if (target instanceof Node && anchor.contains(target)) return;
+      this.closePromptMenu();
+      this.closeModelMenu();
+    });
 
     const box = anchor.createDiv({ cls: "nox-composer-box" });
     box.addEventListener("click", (event) => {
-      if (!(event.target instanceof HTMLButtonElement) &&
-          !(event.target instanceof HTMLSelectElement)) {
-        this.input.focus();
-      }
+      const target = event.target;
+      if (target instanceof Element && target.closest("button")) return;
+      this.input.focus();
     });
 
     this.intentEl = box.createDiv({
@@ -367,6 +552,7 @@ export class ChatView extends ItemView {
       attr: {
         placeholder: "Ask anything about this note...",
         rows: "1",
+        "aria-controls": "nox-prompt-menu",
       },
     });
     this.input.addEventListener("input", () => this.onInput());
@@ -384,6 +570,7 @@ export class ChatView extends ItemView {
     setNoxIcon(this.promptPlusBtn, "plus");
     this.promptPlusBtn.title = "Add context or file";
     this.promptPlusBtn.addEventListener("click", () => {
+      this.closeModelMenu();
       this.promptMenu = this.promptMenu === "source" ? null : "source";
       this.promptMenuActive = 0;
       void this.renderPromptMenu();
@@ -392,7 +579,7 @@ export class ChatView extends ItemView {
 
     const tools = footer.createDiv({ cls: "nox-composer-tools" });
 
-    const actionMenuBtn = tools.createEl("button", {
+    this.actionMenuBtn = tools.createEl("button", {
       cls: "nox-action-menu-btn",
       attr: {
         type: "button",
@@ -400,40 +587,39 @@ export class ChatView extends ItemView {
         "aria-expanded": "false",
       },
     });
-    actionMenuBtn.createSpan({
+    this.actionMenuBtn.createSpan({
       cls: "nox-action-menu-key",
       text: "/",
     });
-    actionMenuBtn.createSpan({
+    this.actionMenuBtn.createSpan({
       text: "Actions",
     });
-    actionMenuBtn.addEventListener("click", () => {
+    this.actionMenuBtn.addEventListener("click", () => {
+      this.closeModelMenu();
       this.promptMenu =
         this.promptMenu === "command" ? null : "command";
       this.promptMenuActive = 0;
-      actionMenuBtn.setAttribute(
-        "aria-expanded",
-        String(this.promptMenu === "command"),
-      );
       void this.renderPromptMenu();
       this.input.focus();
     });
 
-    this.modelSelect = tools.createEl("select", {
-      cls: "nox-model-select",
-    });
-    this.modelSelect.addEventListener("change", () => {
-      this.learning.setModel(this.modelSelect.value);
-    });
-    this.modelSelect.setAttribute("aria-label", "Learning model");
-    this.modelSelect.title = "Learning model";
-    this.modelSelect.createEl("option", {
-      text: "Loading models…",
+    this.modelTrigger = tools.createEl("button", {
+      cls: "nox-model-trigger",
       attr: {
-        disabled: "",
-        selected: "",
+        type: "button",
+        "aria-controls": "nox-model-menu",
+        "aria-haspopup": "listbox",
+        "aria-expanded": "false",
       },
     });
+    this.modelTrigger.title = "Choose learning model";
+    this.modelTrigger.addEventListener("click", () => {
+      this.toggleModelMenu();
+    });
+    this.modelTrigger.addEventListener("keydown", (event) => {
+      this.onModelTriggerKey(event);
+    });
+    this.syncModelTrigger();
 
     const btnGroup = footer.createDiv({ cls: "nox-btn-group" });
 
@@ -521,11 +707,11 @@ export class ChatView extends ItemView {
   private async getPromptMenuItems(): Promise<PromptMenuItem[]> {
     if (this.promptMenu === "command") {
       return PROMPT_COMMANDS.map((command) => ({
-        key: command.kind,
-        name: command.name,
+        key: command.action,
+        name: command.title,
         description: command.description,
-        icon: "sparkles",
-        action: { type: "learning" as const, kind: command.kind },
+        icon: command.icon,
+        action: { type: "learning" as const, kind: command.action },
       }));
     }
 
@@ -598,8 +784,14 @@ export class ChatView extends ItemView {
     this.promptMenuEl.empty();
     this.promptMenuRows = [];
     this.promptMenuEl.toggleClass("nox-hidden", this.promptMenu === null);
-    this.promptPlusBtn?.setAttribute("aria-expanded", String(this.promptMenu !== null));
-    if (!this.promptMenu) return;
+    this.syncPromptMenuControls();
+    if (!this.promptMenu) {
+      this.input.removeAttribute("aria-expanded");
+      this.input.removeAttribute("aria-activedescendant");
+      return;
+    }
+
+    this.input.setAttribute("aria-expanded", "true");
 
     const token = parsePromptToken(this.input.value);
     const query = token?.kind === this.promptMenu ? token.query : "";
@@ -611,8 +803,13 @@ export class ChatView extends ItemView {
       const menuIndex = item.disabled ? -1 : interactiveIndex++;
       const button = this.promptMenuEl.createEl("button", {
         cls: `nox-prompt-menu-row${menuIndex === this.promptMenuActive ? " is-active" : ""}`,
-        attr: { type: "button" },
+        attr: {
+          type: "button",
+          role: "option",
+          "aria-selected": String(menuIndex === this.promptMenuActive),
+        },
       });
+      button.id = `nox-prompt-menu-option-${menuIndex}`;
       button.disabled = Boolean(item.disabled);
       const icon = button.createSpan({ cls: "nox-prompt-menu-icon" });
       setNoxIcon(icon, item.icon);
@@ -622,9 +819,7 @@ export class ChatView extends ItemView {
       if (!item.disabled) {
         button.addEventListener("mouseenter", () => {
           this.promptMenuActive = menuIndex;
-          this.promptMenuRows.forEach((row, index) => {
-            row.toggleClass("is-active", index === this.promptMenuActive);
-          });
+          this.syncPromptMenuRows();
         });
         button.addEventListener("click", () => void this.pickPromptMenuItem(item));
         this.promptMenuRows.push(button);
@@ -637,11 +832,38 @@ export class ChatView extends ItemView {
         ? query ? "Select a note or attach a text file" : "Type @name to search vault notes"
         : "Choose a learning action",
     });
+    this.syncPromptMenuRows();
+    animateNoxPopover(this.promptMenuEl);
+  }
+
+  private syncPromptMenuControls(): void {
+    const sourceOpen = this.promptMenu === "source";
+    const commandOpen = this.promptMenu === "command";
+
+    this.promptPlusBtn?.setAttribute("aria-expanded", String(sourceOpen));
+    this.actionMenuBtn?.setAttribute("aria-expanded", String(commandOpen));
+  }
+
+  private syncPromptMenuRows(): void {
+    this.promptMenuRows.forEach((row, index) => {
+      const active = index === this.promptMenuActive;
+      row.toggleClass("is-active", active);
+      row.setAttribute("aria-selected", String(active));
+    });
+
+    const activeRow = this.promptMenuRows[this.promptMenuActive];
+    if (activeRow) {
+      this.input.setAttribute("aria-activedescendant", activeRow.id);
+    } else {
+      this.input.removeAttribute("aria-activedescendant");
+    }
   }
 
   private async pickPromptMenuItem(item: PromptMenuItem): Promise<void> {
     const action = item.action;
     if (action.type === "attach") {
+      this.input.value = stripPromptToken(this.input.value);
+      this.onInput();
       this.closePromptMenu();
       this.fileInput.click();
       return;
@@ -691,22 +913,23 @@ export class ChatView extends ItemView {
     this.promptMenuRequest += 1;
     this.promptMenu = null;
     this.promptMenuActive = 0;
+    this.syncPromptMenuControls();
     void this.renderPromptMenu();
   }
 
   private setAction(action: LearningActionKind): void {
     this.selectedAction = action;
-    this.syncActionButtons();
     this.updatePlaceholder();
+    this.renderIntent();
+    this.syncCapabilityCards();
   }
 
-  private syncActionButtons(): void {
-    for (const [kind, button] of this.actionButtons) {
-      const active = kind === this.selectedAction;
-      button.toggleClass("is-active", active);
-      button.setAttribute("aria-pressed", String(active));
+  private syncCapabilityCards(): void {
+    for (const [kind, card] of this.capabilityCards) {
+      const selected = kind === this.selectedAction;
+      card.toggleClass("is-selected", selected);
+      card.setAttribute("aria-pressed", String(selected));
     }
-    this.renderIntent();
   }
 
   private renderIntent(): void {
@@ -721,6 +944,7 @@ export class ChatView extends ItemView {
     const chip = this.intentEl.createDiv({
       cls: `nox-intent-chip nox-intent-chip--${this.selectedAction}`,
     });
+    animateNoxEnter(chip, 3);
     chip.createSpan({ cls: "nox-intent-label", text: label });
 
     const remove = chip.createEl("button", {
@@ -768,7 +992,10 @@ export class ChatView extends ItemView {
   private async syncChips(): Promise<void> {
     const context = await this.learning.resolveContext(this.extraCtx);
     this.currentContext = context;
-    this.systemChip.addClass("nox-chip--hidden");
+    this.systemChip.toggleClass(
+      "nox-chip--hidden",
+      this.systemContextFiles.length === 0,
+    );
 
     const hasSelection = Boolean(context.selection);
     this.selectionChip.toggleClass("nox-chip--hidden", !hasSelection);
@@ -783,6 +1010,8 @@ export class ChatView extends ItemView {
       this.noteChip.title = activeNote.path;
     }
 
+    this.syncContextVisibility();
+
     this.updatePlaceholder();
 
     if (
@@ -793,7 +1022,20 @@ export class ChatView extends ItemView {
     }
   }
 
+  private syncContextVisibility(): void {
+    this.contextRow.toggleClass(
+      "nox-hidden",
+      !hasInspectableContext({
+        hasSelection: Boolean(this.currentContext?.selection),
+        hasActiveNote: Boolean(this.currentContext?.activeNote),
+        explicitCount: this.extraCtx.length,
+        systemCount: this.systemContextFiles.length,
+      }),
+    );
+  }
+
   private onInput(): void {
+    this.closeModelMenu();
     this.sendBtn.disabled =
       !this.canSend() || this.uiState === "RUNNING";
 
@@ -820,9 +1062,7 @@ export class ChatView extends ItemView {
         this.promptMenuActive =
           (this.promptMenuActive + direction + this.promptMenuRows.length) %
           this.promptMenuRows.length;
-        this.promptMenuRows.forEach((row, index) => {
-          row.toggleClass("is-active", index === this.promptMenuActive);
-        });
+        this.syncPromptMenuRows();
         return;
       }
 
@@ -842,6 +1082,8 @@ export class ChatView extends ItemView {
     if (event.key === "Escape") {
       if (this.promptMenu) {
         this.closePromptMenu();
+      } else if (this.modelMenuOpen) {
+        this.closeModelMenu();
       } else if (this.uiState === "RUNNING") {
         this.cancelBtn.click();
       }
@@ -852,7 +1094,31 @@ export class ChatView extends ItemView {
     const prompt = this.input.value.trim() || "Review the attached context.";
     if (!this.canSend() || this.uiState === "RUNNING") return;
 
-    const explicitContext = this.extraCtx;
+    this.closeModelMenu();
+    const request: LearningRequest = {
+      prompt,
+      action: this.selectedAction,
+      explicitContext: [...this.extraCtx],
+    };
+
+    this.lastTurnRequest = request;
+    await this.runTurn(request, true);
+  }
+
+  private async retryLastTurn(): Promise<void> {
+    if (!this.lastTurnRequest || this.uiState === "RUNNING") return;
+
+    this.thread
+      .querySelectorAll(".nox-inline-status--failed")
+      .forEach((status) => status.remove());
+
+    await this.runTurn(this.lastTurnRequest, false);
+  }
+
+  private async runTurn(
+    request: LearningRequest,
+    appendUserMessage: boolean,
+  ): Promise<void> {
     this.closePromptMenu();
 
     this.input.value = "";
@@ -867,34 +1133,25 @@ export class ChatView extends ItemView {
     this.statusEl = null;
     this.streamedResponseText = "";
     this.streamingPendingText = "";
-    this.stopThinkingSequence();
     this.stopLoadingTimer();
+    this.turnTerminal = false;
 
-    this.runningAction = this.selectedAction;
-    this.appendUserBubble(prompt);
+    this.runningAction = request.action;
+    if (appendUserMessage) this.appendUserBubble(request.prompt);
     this.setUIState("RUNNING");
     this.ensureAgentBubble();
 
     try {
-      for await (const event of this.learning.run({
-        prompt,
-        action: this.runningAction,
-        explicitContext,
-      })) {
+      for await (const event of this.learning.run(request)) {
         this.handleLearningEvent(event);
       }
-    } catch (err) {
-      this.finishStreamingBubble("Stopped");
-
-      const message =
-        err instanceof Error ? err.message : String(err);
-
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.warn("[Nox] Unexpected turn failure", message);
-      this.appendInlineError(
-        this.thread,
+      this.terminateTurn(
+        "failed",
         "Nox hit an unexpected error. Try again.",
       );
-      this.setUIState("ANSWER");
     }
   }
 
@@ -904,12 +1161,14 @@ export class ChatView extends ItemView {
       this.systemContextFiles = event.context.system.map((item) => item.file);
       this.systemChip.toggleClass("nox-chip--hidden", event.context.system.length === 0);
       this.systemChip.title = this.systemContextFiles.join("\n");
+      this.syncContextVisibility();
       return;
     }
 
     if (event.type === "response-delta") {
+      const shouldFollow = this.isNearThreadBottom();
       this.appendToAgentBubble(event.text);
-      this.scrollThread();
+      if (shouldFollow) this.scrollThread("auto");
       return;
     }
 
@@ -941,36 +1200,53 @@ export class ChatView extends ItemView {
     }
 
     if (event.type === "completed") {
-      if (this.uiState === "RUNNING") this.setUIState("ANSWER");
-      this.finishStreamingBubble();
-      if (
-        this.runningAction === "explain" ||
-        this.runningAction === "review" ||
-        this.runningAction === "edit"
-      ) {
-        this.setAction("ask");
-      }
-      this.runningAction = null;
+      this.terminateTurn("completed");
       return;
     }
 
     if (event.type === "cancelled") {
-      this.finishStreamingBubble("Stopped");
-      this.appendInlineError(this.thread, "Stopped.");
-      this.setUIState("ANSWER");
+      this.terminateTurn("stopped", "Stopped.");
       return;
     }
 
     if (event.type === "failed") {
-      this.finishStreamingBubble("Unable to finish");
-      this.appendInlineError(this.thread, event.failure.message);
+      this.terminateTurn("failed", event.failure.message);
+    }
+  }
+
+  private terminateTurn(
+    outcome: TerminalOutcome,
+    message?: string,
+  ): void {
+    if (this.turnTerminal) return;
+    this.turnTerminal = true;
+
+    const action = this.runningAction;
+    if (this.uiState === "RUNNING") this.setUIState("ANSWER");
+
+    if (outcome === "completed") {
+      this.finishStreamingBubble();
+    } else {
+      this.finishStreamingBubble(
+        outcome === "stopped" ? "Stopped" : "Unable to finish",
+      );
+      this.appendInlineStatus(
+        this.thread,
+        outcome,
+        message ?? (outcome === "stopped" ? "Stopped." : "Unable to finish."),
+        outcome === "failed" ? () => void this.retryLastTurn() : undefined,
+      );
       this.setUIState("ANSWER");
     }
+
+    if (action && shouldResetAction(action, outcome)) {
+      this.setAction("ask");
+    }
+    this.runningAction = null;
   }
 
   private finishStreamingBubble(doneLabel?: string): void {
     const elapsed = this.formatElapsed(Date.now() - this.loadingStartedAt);
-    this.stopThinkingSequence();
     this.flushStreamingText();
     this.renderMarkdownResponse();
     if (doneLabel === undefined) this.appendStreamActions();
@@ -1015,54 +1291,6 @@ export class ChatView extends ItemView {
     this.thinkingChevronEl?.toggleClass("is-expanded", expanded);
   }
 
-  private stopThinkingSequence(): void {
-    if (this.thinkingStageTimer !== null) {
-      window.clearTimeout(this.thinkingStageTimer);
-      this.thinkingStageTimer = null;
-    }
-  }
-
-  private startThinkingSequence(): void {
-    this.thinkingStage = 0;
-    this.renderThinkingStage();
-    this.scheduleThinkingStage();
-  }
-
-  private scheduleThinkingStage(): void {
-    if (this.thinkingStage >= this.thinkingRows.length - 1) return;
-
-    const delays = [800, 600, 1800, 2600];
-    const delay = delays[this.thinkingStage] ?? 1200;
-
-    this.thinkingStageTimer = window.setTimeout(() => {
-      this.thinkingStage += 1;
-      this.renderThinkingStage();
-      this.scheduleThinkingStage();
-    }, delay);
-  }
-
-  private renderThinkingStage(): void {
-    const visible = Math.min(
-      this.thinkingStage + 1,
-      this.thinkingRows.length,
-    );
-
-    this.thinkingRows.forEach((row, index) => {
-      const active = index === visible - 1;
-      const done = index < visible - 1;
-      const marker = row.firstElementChild as HTMLElement | null;
-
-      row.toggleClass("nox-hidden", index >= visible);
-      row.toggleClass("is-active", active);
-      row.toggleClass("is-done", done);
-
-      if (marker) {
-        marker.textContent = done ? "✓" : "";
-        marker.toggleClass("nox-thinking-marker--spinner", active);
-      }
-    });
-  }
-
   private startLoadingTimer(): void {
     if (this.loadingTimer !== null) {
       window.clearInterval(this.loadingTimer);
@@ -1101,7 +1329,7 @@ export class ChatView extends ItemView {
     this.uiState = state;
 
     const busy = state === "RUNNING";
-    this.cancelBtn.disabled = false;
+    this.cancelBtn.disabled = !busy;
     this.input.disabled = busy || state === "ERROR";
     this.sendBtn.disabled =
       busy || state === "ERROR" || !this.canSend();
@@ -1117,6 +1345,7 @@ export class ChatView extends ItemView {
     this.thread.empty();
     this.agentCursorEl = null;
     this.statusEl = null;
+    this.capabilityCards.clear();
 
     const slate = this.thread.createDiv({
       cls: "nox-empty-slate",
@@ -1175,6 +1404,7 @@ export class ChatView extends ItemView {
         attr: {
           type: "button",
           "aria-label": capability.title,
+          "aria-pressed": String(this.selectedAction === capability.action),
         },
       });
 
@@ -1210,9 +1440,13 @@ export class ChatView extends ItemView {
         this.setAction(capability.action);
         this.focusComposer();
       });
+      this.capabilityCards.set(capability.action, card);
     }
 
+    this.syncCapabilityCards();
+
     this.setUIState("EMPTY");
+    animateNoxEnter(slate, 5);
   }
 
   private renderEmptyContext(parent: HTMLElement): void {
@@ -1341,11 +1575,24 @@ export class ChatView extends ItemView {
       text: message,
     });
 
-    const button = slate.createEl("button", {
-      cls: "nox-configure-btn",
-      text: "Configure Nox →",
+    const actions = slate.createDiv({ cls: "nox-error-actions" });
+    const retry = actions.createEl("button", {
+      cls: "nox-retry-btn",
+      text: "Retry",
+      attr: { type: "button" },
     });
-    button.addEventListener("click", () => {
+    retry.addEventListener("click", () => {
+      retry.disabled = true;
+      retry.textContent = "Checking…";
+      void this.retryRuntime();
+    });
+
+    const configure = actions.createEl("button", {
+      cls: "nox-configure-btn",
+      text: "Configure Nox",
+      attr: { type: "button" },
+    });
+    configure.addEventListener("click", () => {
       this.openSettings();
     });
 
@@ -1358,6 +1605,7 @@ export class ChatView extends ItemView {
       cls: "nox-bubble nox-bubble--user",
     });
     bubble.setText(text);
+    animateNoxEnter(bubble, 4);
   }
 
   private ensureAgentBubble(): void {
@@ -1372,12 +1620,16 @@ export class ChatView extends ItemView {
     meta.createSpan({ cls: "nox-response-label", text: "Nox" });
     meta.createSpan({
       cls: "nox-response-sub",
-      text: ACTIONS.find((action) => action.kind === this.selectedAction)?.label ?? "Response",
+      text:
+        ACTIONS.find(
+          (action) => action.kind === (this.runningAction ?? this.selectedAction),
+        )?.label ?? "Response",
     });
     this.responseTimeEl = meta.createSpan({ cls: "nox-response-time", text: "for 0.0s" });
     this.agentContentEl = this.agentCursorEl.createDiv({
       cls: "nox-bubble-content",
     });
+    animateNoxEnter(this.agentCursorEl, 4);
   }
 
   private buildThinkingTrace(): HTMLElement {
@@ -1441,6 +1693,7 @@ export class ChatView extends ItemView {
     });
 
     this.startLoadingTimer();
+    animateNoxEnter(trace, 4);
     return trace;
   }
 
@@ -1747,21 +2000,46 @@ export class ChatView extends ItemView {
     return wrap;
   }
 
-  private appendInlineError(
+  private appendInlineStatus(
     parent: HTMLElement,
+    kind: "stopped" | "failed",
     message: string,
+    retry?: () => void,
   ): void {
-    parent.createDiv({
-      cls: "nox-inline-error",
-      text: "⚠ " + message,
+    const row = parent.createDiv({
+      cls: `nox-inline-status nox-inline-status--${kind}`,
     });
+
+    row.createSpan({
+      cls: "nox-inline-status-message",
+      text: kind === "failed" ? "⚠ " + message : message,
+    });
+
+    if (retry) {
+      const button = row.createEl("button", {
+        cls: "nox-inline-status-retry",
+        text: "Retry",
+        attr: { type: "button" },
+      });
+      button.addEventListener("click", retry);
+    }
+
     this.scrollThread();
   }
 
-  private scrollThread(): void {
+  private isNearThreadBottom(): boolean {
+    const distance =
+      this.thread.scrollHeight -
+      this.thread.scrollTop -
+      this.thread.clientHeight;
+
+    return distance < 48;
+  }
+
+  private scrollThread(behavior: ScrollBehavior = "smooth"): void {
     this.thread.scrollTo({
       top: this.thread.scrollHeight,
-      behavior: "smooth",
+      behavior,
     });
   }
 }

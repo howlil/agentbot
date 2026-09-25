@@ -1,3 +1,4 @@
+import type { IconName } from "obsidian";
 import type { LearningActionKind } from "../learning/learning-types";
 
 export interface NoxCapability {
@@ -6,7 +7,7 @@ export interface NoxCapability {
   command: string;
   description: string;
   meta: string;
-  icon: string;
+  icon: IconName;
   tone: "purple" | "blue" | "coral" | "green";
 }
 
