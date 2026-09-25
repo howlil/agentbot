@@ -1,0 +1,140 @@
+# Nox
+
+Nox is an AI learning companion for Obsidian. It keeps explanation,
+practice, review, and safe Markdown editing beside the note you are working on.
+
+Nox is agent-runtime agnostic at the product boundary. The current runtime
+adapter uses the AGY CLI, while the UI and Learning OS flow depend on the
+normalized agent contract rather than provider-specific stream events.
+
+## What Nox does
+
+- Uses the current selection or active note as explicit context.
+- Streams answers into an Obsidian sidebar.
+- Supports Ask, Explain, Practice, Review, and Edit learning actions.
+- Tracks evidence-backed learning state in the vault.
+- Shows proposed Markdown changes before applying them.
+- Applies approved edits through Obsidian APIs so editor state and undo remain
+  available.
+- Persists sessions and model preferences locally in the plugin data.
+
+## Requirements
+
+- Obsidian desktop `1.4.0` or newer.
+- Node.js and `pnpm` for development.
+- A configured agent runtime. The current adapter expects the AGY CLI to be
+  available on `PATH`, or at an absolute path configured in Nox settings.
+
+## Setup
+
+```sh
+pnpm install
+pnpm run verify
+```
+
+Open the plugin settings in Obsidian and configure **Agent executable** if the
+runtime is not discoverable on `PATH`. **Preferred model** may be left blank to
+use the runtime default.
+
+The runtime can also be selected through the `AGY_PATH` environment variable.
+Restart Obsidian after changing environment variables.
+
+## Development commands
+
+```sh
+pnpm run dev              # watch the plugin bundle
+pnpm run typecheck       # TypeScript check
+pnpm run test:unit       # deterministic unit and state tests
+pnpm run test:integration # process, deploy, and boundary tests
+pnpm run build           # production artifacts in dist/
+pnpm run test:artifacts  # verify plugin identity and artifact contents
+pnpm run verify           # complete local verification gate
+```
+
+`dist/` is generated output. Do not edit it directly.
+
+## Deploy to a local vault
+
+Build and copy the generated plugin into an Obsidian vault with:
+
+```sh
+pnpm run deploy "C:\\Path\\To\\Your\\Vault"
+```
+
+The deploy command targets `.obsidian/plugins/nox-obsidian`, copies the
+contents of `dist/`, and can update the vault's community plugin list. It does
+not modify a vault unless a vault path is explicitly provided or configured
+through `OBSIDIAN_VAULT`.
+
+## Product flow
+
+```text
+selection or current note
+        ↓
+user intent
+        ↓
+Learning OS action
+  ask / explain / practice / review / edit
+        ↓
+streamed response or practice state
+        ↓
+evidence-backed learning update
+        ↓
+optional proposed Markdown edit
+        ↓
+user review → Apply or Reject
+```
+
+Nox treats context as visible input, recommendations as proposals, and file
+changes as user-approved mutations. A normal question is not treated as proof
+of mastery; learning progress requires meaningful evidence.
+
+## Architecture
+
+```text
+ChatView
+  ↓
+LearningController
+  ├── ContextResolver
+  ├── PolicyLoader
+  ├── VaultLearningStore
+  ├── MutationService
+  └── SessionController
+          ↓
+      AgentAdapter
+          ↓
+      AgyAdapter → AGY CLI
+```
+
+Provider protocol parsing stays inside `AgyAdapter`. The UI consumes
+normalized learning events and never renders raw provider JSON.
+
+## Repository map
+
+```text
+src/
+├── agent/       runtime contract and AGY adapter
+├── chat/        Obsidian view and interaction surface
+├── context/     selection, note, and policy context
+├── learning/    actions, practice, and learning state
+├── mutation/    safe Markdown proposal application
+├── persistence/ durable vault learning state
+├── session/     conversation persistence
+└── settings/   Nox runtime settings
+
+tests/           unit and integration behavior proofs
+public/nox.png   canonical Nox brand asset
+styles.css       Tailwind v4 design token and component entry
+manifest.json    Obsidian plugin metadata
+```
+
+## Design and engineering guidance
+
+- `DESIGN.md` is the interface source of truth: compact, calm, technical, and
+  semantic purple used sparingly.
+- `AGENTS.md` defines ownership, workflow, and verification rules.
+- `.agents/product.md` defines the current Nox Learning OS contract.
+- `.agents/testing.md` maps high-risk behavior to the smallest faithful proof.
+
+Keep changes small, preserve clear ownership, and run `pnpm run verify` before
+integration.
