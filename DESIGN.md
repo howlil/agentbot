@@ -43,6 +43,12 @@ Nox
     └── AddContext / Model / Send
 ```
 
+Session history remains session-owned. `SessionController` exposes persisted
+sessions and performs the current-session switch; `ChatView` only renders the
+compact history menu and rehydrates the selected transcript. History labels are
+derived from the first user prompt, latest visible message, and update time;
+there is no second transcript store.
+
 The empty thread is a compact workspace entry surface, not a separate landing
 page:
 
@@ -62,6 +68,57 @@ contracts.
 Card selection sets the composer intent and focus. It does not send a request.
 The same capability metadata powers the cards and `/` menu so labels,
 descriptions, commands, and icons cannot drift.
+
+## Shared UI contracts
+
+Reusable primitives own stable visual and interaction grammar:
+
+```text
+NoxIcon / NoxIconButton
+NoxButton
+NoxChip
+NoxStatus
+NoxSurface
+NoxMenuRow + NoxMenuState
+NoxPopover
+NoxComposer
+NoxMessageMeta
+```
+
+Feature components own learning meaning and domain actions:
+
+```text
+CapabilityCard
+PracticeCard
+ReviewFindingCard
+ProposalCard
+```
+
+Do not promote a feature component to a global primitive only because it looks
+similar to another surface. Promote it when responsibility, interaction
+contract, and reuse are stable. Global primitives must not own learning state,
+agent execution, persistence, or mutation policy.
+
+Context rendering, menu popovers, and response metadata must compose these
+contracts instead of creating parallel DOM structures. Learning-specific cards
+remain feature components and should not be generalized into product-wide
+primitives.
+
+`NoxComposer` owns the reusable prompt surface behavior: input, file picker,
+context chips, intent chip, command/model popover anchors, cancel, and send
+controls. The host controller supplies callbacks and domain data; it remains
+the owner of learning actions, context resolution, model persistence, and turn
+state. This keeps the composer reusable without making the global UI layer
+aware of Learning OS rules.
+
+`NoxSelectionActions` is the reusable selection affordance. It appears only
+when `ContextResolver` returns non-empty selected text, exposes `@selection`
+and the source note, and offers compact Explain/Improve actions with optional
+Shorten/Tone/Grammar disclosure. It owns only local visibility, disclosure,
+and disabled state. The host maps an action to the existing learning request,
+so selection actions do not create a parallel streaming or result lifecycle.
+The same resolved selection remains visible in the composer context chip and
+is resolved again by the controller at send time.
 
 Capability cards use a mostly white surface with a restrained tone variant:
 
@@ -90,6 +147,12 @@ The model picker follows the same rule. Product controls must not use a native
 selection states. Model selection uses a composer-owned custom popover with a
 visible selected row, compact chevron trigger, keyboard navigation, and an
 outside-click close path.
+
+All composer pickers share one interaction recipe: the trigger exposes
+`aria-expanded` and `aria-controls`, the active option uses the same restrained
+accent tint, the popover uses the shared Nox shadow and bounded scrolling, and
+focus returns to the originating control after selection or dismissal. Command
+rows render the same command label and icon metadata as their capability cards.
 
 ## Card decision
 
@@ -124,6 +187,16 @@ System   = learning policy / progress
 The composer shows a compact summary such as `@index.md · selection +2`.
 Typing `@name` searches vault Markdown notes and adds real context.
 
+Selecting text exposes a contextual action bar above the composer:
+
+```text
+@selection  note.md · 18 words
+[Explain] [Improve]                         [⌄]
+```
+
+Actions are direct shortcuts into the existing Explain/Edit learning flow;
+they do not simulate a second response stream or bypass context resolution.
+
 ## Visual system
 
 Use a deliberate light-mode token ratio:
@@ -137,6 +210,10 @@ Use a deliberate light-mode token ratio:
 Nox owns these semantic tokens instead of inheriting arbitrary Obsidian
 theme colors. Purple means active AI intent, focus, selection, or a primary AI
 action. It should not decorate every surface.
+
+Semantic tokens have one owner in the root token block. Composition sections may
+override layout for a surface, but must not redefine semantic colors, radii, or
+elevation tokens.
 
 Green = correct/success/applied.
 Orange = partial/warning/review.
@@ -160,8 +237,17 @@ UserBubble: compact purple tint, max ~84%, no broad shadow.
 
 PlainResponse: transparent outer surface, no border, 13–14px rendered Markdown.
 
-StatusTrace: show real operational facts only. Default `Working · 2.4s`;
-completion `Completed in 2.4s`. Do not simulate tool execution with timers.
+Rendered Markdown links use Obsidian workspace navigation. Internal `.md`
+links and heading anchors open through `workspace.openLinkText` with the
+rendering note as the source path; external URLs remain browser-owned. Cmd/Ctrl
+click preserves the native new-leaf affordance.
+
+Assistant messages persist their rendering `sourcePath` so restored history
+keeps relative Markdown links anchored to the note that produced the answer.
+
+StatusTrace: show real operational facts only. Default `Thinking · 2.4s`;
+completion `Completed in 2.4s`. The trace owns the only live timer; do not
+simulate tool execution with timers.
 
 PracticeCard: neutral card with small purple concept label and inset hint.
 
@@ -178,9 +264,9 @@ as already executed.
 ## Composer
 
 ```text
-[Intent ×] [attachments...]
+[context chip] prompt text...
 
-Ask anything about this note...
+longer text moves onto its own line
 
 +                              Model ▾   send
 ```
@@ -189,9 +275,10 @@ Composer radius 10px, input 13px, controls 28px. Model is visually secondary.
 The plus control owns context and file actions; do not duplicate it with a
 separate `No context` or context selector button.
 
-When context exists, the composer may show compact context chips above the
-input. The empty thread may also show a fuller current-context strip so the
-user can understand what the first action will operate on.
+When context exists, its chip is embedded at the leading edge of the prompt
+line. Keep the compact one-line layout while the input fits; when the textarea
+wraps, move the text below the chip and place controls on the following row.
+Do not force a fixed-height expanded composer or create a second context bar.
 
 ## Motion
 
@@ -207,6 +294,18 @@ streaming  → response resolves progressively
 completed  → actions appear after the response settles
 menu open  → compact popover enters from the composer edge
 ```
+
+Thinking trace contract:
+
+- The thinking trace owns the only live elapsed timer for a turn.
+- The response meta row may identify the action, but must not repeat the live
+  timer while the turn is running.
+- The response bubble is created only after a response delta or a structured
+  result needs a rendered surface.
+- Trace rows represent observable milestones from normalized events; they must
+  not advance from decorative delays or simulated reasoning.
+- The streaming cursor appears only while response text is actively arriving,
+  and disappears before terminal actions or failure status are rendered.
 
 Use Motion for interruptible runtime transitions and layout-adjacent entry
 states. Keep simple loops and hover feedback in CSS. Do not animate every token

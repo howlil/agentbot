@@ -105,6 +105,8 @@ test("sendTurn stores only the display prompt and persists conversation id", asy
     controller.getSession().conversationId,
     "conversation-1",
   );
+  await controller.recordAssistantMessage("answer", "note.md");
+  assert.equal(controller.getSession().messages[1]?.sourcePath, "note.md");
   assert.ok(harness.getData());
 });
 
@@ -131,4 +133,45 @@ test("blank assistant messages are not persisted", async () => {
   await controller.recordAssistantMessage("   ");
 
   assert.deepEqual(controller.getSession().messages, []);
+});
+
+test("lists sessions and restores a selected session as current", async () => {
+  const harness = pluginHarness();
+  const adapter: AgentAdapter = {
+    check: async () => ({ status: "ready" }),
+    listModels: async () => [],
+    send: async function* () {
+      yield { type: "completed" };
+    },
+  };
+  let id = 0;
+  let now = 0;
+
+  const controller = new SessionController(
+    harness.plugin as never,
+    new SessionStore({
+      now: () => ++now,
+      uuid: () => `session-${++id}`,
+    }),
+    adapter,
+  );
+
+  await controller.init();
+  const first = controller.getSession();
+  const second = await controller.newSession();
+
+  assert.deepEqual(
+    controller.listSessions().map((session) => session.id),
+    [second.id, first.id],
+  );
+
+  const selected = await controller.selectSession(first.id);
+  assert.equal(selected?.id, first.id);
+  assert.equal(controller.getSession().id, first.id);
+  assert.equal(
+    (harness.getData() as { "nox-sessions"?: { currentSessionId?: string } })[
+      "nox-sessions"
+    ]?.currentSessionId,
+    first.id,
+  );
 });

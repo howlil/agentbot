@@ -42,6 +42,8 @@ type SessionPort = Pick<
   SessionController,
   | "checkRuntime"
   | "getSession"
+  | "listSessions"
+  | "selectSession"
   | "getModels"
   | "setModel"
   | "newSession"
@@ -105,6 +107,10 @@ export class LearningController {
     return this.sessions.getSession();
   }
 
+  listSessions(): ChatSession[] {
+    return this.sessions.listSessions();
+  }
+
   getModels(): AgentModel[] {
     return this.sessions.getModels();
   }
@@ -117,6 +123,12 @@ export class LearningController {
     this.practice.reset();
     this.pendingProposals.clear();
     return this.sessions.newSession();
+  }
+
+  async selectSession(id: string): Promise<ChatSession | null> {
+    this.practice.reset();
+    this.pendingProposals.clear();
+    return this.sessions.selectSession(id);
   }
 
   async resolveContext(
@@ -315,6 +327,7 @@ export class LearningController {
             if (mapped.type === "mutation-proposed") {
               await this.sessions.recordAssistantMessage(
                 visibleText,
+                snapshot.mutableFile,
               );
               visibleText = "";
               await this.sessions.recordProposal(
@@ -342,6 +355,7 @@ export class LearningController {
             if (mapped.type === "mutation-proposed") {
               await this.sessions.recordAssistantMessage(
                 visibleText,
+                snapshot.mutableFile,
               );
               visibleText = "";
               await this.sessions.recordProposal(
@@ -365,6 +379,7 @@ export class LearningController {
 
           await this.sessions.recordAssistantMessage(
             visibleText,
+            snapshot.mutableFile,
           );
           yield { type: "completed" };
           return;

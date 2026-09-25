@@ -59,6 +59,20 @@ export class SessionController {
     return this.currentSession;
   }
 
+  listSessions(): ChatSession[] {
+    return this.store.listSessions();
+  }
+
+  async selectSession(id: string): Promise<ChatSession | null> {
+    const session = this.store.getSession(id);
+    if (!session) return null;
+
+    this.currentSession = session;
+    this.store.setCurrentSession(id);
+    await this.save();
+    return session;
+  }
+
   setModel(modelId?: string): void {
     const normalized = modelId || undefined;
     this.store.setDefaultModel(normalized);
@@ -113,10 +127,17 @@ export class SessionController {
     await this.save();
   }
 
-  async recordAssistantMessage(content: string): Promise<void> {
+  async recordAssistantMessage(
+    content: string,
+    sourcePath?: string,
+  ): Promise<void> {
     if (!content.trim()) return;
     const session = this.getSession();
-    session.messages.push({ role: "assistant", content });
+    session.messages.push({
+      role: "assistant",
+      content,
+      sourcePath,
+    });
     this.store.updateSession(session);
     await this.save();
   }

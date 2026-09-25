@@ -69,6 +69,7 @@ export type ApplyResult =
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  sourcePath?: string;
   proposalId?: string;
   proposal?: EditProposal;
   proposalState?: "pending" | "applied" | "rejected" | "stale";

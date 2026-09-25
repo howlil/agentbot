@@ -1,7 +1,6 @@
 import {
   ItemView,
   MarkdownRenderer,
-  setIcon,
   WorkspaceLeaf,
   type IconName,
 } from "obsidian";
@@ -20,7 +19,7 @@ import {
   PracticeQuestion,
 } from "../learning/practice-types";
 import { ReviewFinding } from "../learning/review-types";
-import { ChatMessage, EditProposal, type AgentModel } from "../types";
+import { ChatMessage, EditProposal, type AgentModel, type ChatSession } from "../types";
 import { ProposedEdit } from "../learning/learning-types";
 import {
   parsePromptToken,
@@ -29,11 +28,27 @@ import {
 } from "./prompt-token";
 import { NOX_CAPABILITIES } from "./capabilities";
 import { animateNoxEnter, animateNoxPopover } from "./motion";
+import { resolveNoxMarkdownLink } from "./markdown-links";
 import {
-  hasInspectableContext,
   shouldResetAction,
   TerminalOutcome,
 } from "./chat-state";
+import {
+  createNoxButton,
+  createNoxIconButton,
+  createNoxMessageMeta,
+  createNoxMenuRow,
+  createNoxSurface,
+  createNoxStatus,
+  setNoxIcon,
+} from "../ui/primitives";
+import { NoxMenuState } from "../ui/menu";
+import { createNoxPopover, NoxPopoverState } from "../ui/popover";
+import { NoxComposer, type NoxComposerContext } from "../ui/composer";
+import {
+  NoxSelectionActions,
+  type NoxSelectionAction,
+} from "../ui/selection-actions";
 
 export const NOX_VIEW_TYPE = "nox-sidebar";
 
@@ -69,54 +84,38 @@ interface PromptMenuItem {
   name: string;
   description: string;
   icon: IconName;
+  command?: string;
   disabled?: boolean;
   action: PromptMenuAction;
-}
-
-function setNoxIcon(element: HTMLElement, icon: IconName): void {
-  element.empty();
-  setIcon(element, icon);
-
-  const svg = element.querySelector<SVGElement>("svg");
-  if (!svg) return;
-
-  svg.classList.add("nox-icon");
-  svg.setAttribute("width", "15");
-  svg.setAttribute("height", "15");
-  svg.style.setProperty("width", "15px", "important");
-  svg.style.setProperty("height", "15px", "important");
-  svg.style.setProperty("min-width", "15px", "important");
-  svg.style.setProperty("min-height", "15px", "important");
-  svg.style.setProperty("display", "block", "important");
 }
 
 export class ChatView extends ItemView {
   private thread!: HTMLElement;
   private composer!: HTMLElement;
+  private composerUi!: NoxComposer;
+  private selectionActions!: NoxSelectionActions;
   private headerEl!: HTMLElement;
+  private historyBtn!: HTMLButtonElement;
+  private historyMenuEl!: HTMLElement;
+  private historyPopover!: NoxPopoverState;
+  private readonly historyMenuState = new NoxMenuState();
 
   private input!: HTMLTextAreaElement;
   private sendBtn!: HTMLButtonElement;
-  private selectionChip!: HTMLElement;
-  private noteChip!: HTMLElement;
-  private systemChip!: HTMLElement;
   private cancelBtn!: HTMLButtonElement;
   private modelTrigger!: HTMLButtonElement;
   private modelMenuEl: HTMLElement | null = null;
-  private modelMenuOpen = false;
-  private modelMenuActive = 0;
-  private modelMenuRows: HTMLButtonElement[] = [];
+  private modelPopover!: NoxPopoverState;
+  private readonly modelMenuState = new NoxMenuState();
   private models: AgentModel[] = [];
   private fileInput!: HTMLInputElement;
   private promptPlusBtn!: HTMLButtonElement;
   private actionMenuBtn!: HTMLButtonElement;
-  private contextRow!: HTMLElement;
-  private attachmentsEl: HTMLElement | null = null;
-  private intentEl: HTMLElement | null = null;
+  private commandHintBtn: HTMLButtonElement | null = null;
   private promptMenuEl: HTMLElement | null = null;
+  private promptPopover!: NoxPopoverState;
   private promptMenu: PromptMenuKind | null = null;
-  private promptMenuActive = 0;
-  private promptMenuRows: HTMLButtonElement[] = [];
+  private readonly promptMenuState = new NoxMenuState();
   private promptMenuRequest = 0;
   private attachments: Array<{
     name: string;
@@ -137,7 +136,6 @@ export class ChatView extends ItemView {
   private thinkingManualExpanded: boolean | null = null;
   private streamedResponseText = "";
   private streamingPendingText = "";
-  private responseTimeEl: HTMLElement | null = null;
 
   private uiState: UIState = "EMPTY";
   private selectedAction: LearningActionKind = "ask";
@@ -180,6 +178,9 @@ export class ChatView extends ItemView {
     this.buildHeader(root);
     this.thread = root.createDiv({ cls: "nox-thread" });
     this.composer = root.createDiv({ cls: "nox-composer" });
+    this.selectionActions = new NoxSelectionActions(this.composer, {
+      onAction: (action) => this.runSelectionAction(action),
+    });
     this.buildComposer(this.composer);
 
     if (!(await this.ensureRuntimeReady())) return;
@@ -254,15 +255,28 @@ export class ChatView extends ItemView {
 
     const right = top.createDiv({ cls: "nox-header-right" });
 
-    const newBtn = right.createEl("button", {
-      cls: "nox-new-btn",
-      attr: {
-        type: "button",
-        "aria-label": "New learning session",
-      },
+    this.historyBtn = createNoxIconButton(right, {
+      cls: "nox-history-btn",
+      icon: "history",
+      label: "Open chat history",
+      title: "Chat history",
     });
-    setNoxIcon(newBtn, "plus");
-    newBtn.title = "New learning session";
+    this.historyBtn.setAttribute("aria-controls", "nox-history-menu");
+    this.historyBtn.setAttribute("aria-expanded", "false");
+    this.historyBtn.addEventListener("click", () => this.toggleHistoryMenu());
+    this.historyBtn.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && this.historyMenuState.isOpen) {
+        event.preventDefault();
+        this.closeHistoryMenu();
+      }
+    });
+
+    const newBtn = createNoxIconButton(right, {
+      cls: "nox-new-btn",
+      icon: "plus",
+      label: "New learning session",
+      title: "New learning session",
+    });
     newBtn.addEventListener("click", async () => {
       try {
         await this.learning.newSession();
@@ -276,6 +290,7 @@ export class ChatView extends ItemView {
         this.setAction("ask");
         await this.syncChips();
         this.showEmpty();
+        this.renderHistoryMenu();
         this.focusComposer();
       } catch (error) {
         console.warn(
@@ -290,21 +305,158 @@ export class ChatView extends ItemView {
       }
     });
 
-    const moreBtn = right.createEl("button", {
+    const moreBtn = createNoxIconButton(right, {
       cls: "nox-more-btn",
-      attr: {
-        type: "button",
-        "aria-label": "Open Nox settings",
-      },
+      icon: "more-horizontal",
+      label: "Open Nox settings",
+      title: "Nox settings",
     });
-    setNoxIcon(moreBtn, "more-horizontal");
-    moreBtn.title = "Nox settings";
     moreBtn.addEventListener("click", () => this.openSettings());
+
+    this.historyMenuEl = createNoxPopover(this.headerEl, {
+      cls: "nox-history-menu",
+      id: "nox-history-menu",
+      role: "menu",
+      label: "Chat history",
+    });
+    this.historyPopover = new NoxPopoverState(this.historyMenuEl);
+    this.syncHistoryTrigger();
+  }
+
+  private toggleHistoryMenu(): void {
+    if (this.historyMenuState.isOpen) {
+      this.closeHistoryMenu();
+      return;
+    }
+
+    this.closePromptMenu();
+    this.closeModelMenu();
+    this.historyMenuState.openAt(0);
+    this.renderHistoryMenu();
+  }
+
+  private closeHistoryMenu(): void {
+    this.historyMenuState.close();
+    this.historyPopover?.close();
+    this.syncHistoryTrigger();
+  }
+
+  private syncHistoryTrigger(): void {
+    if (!this.historyBtn) return;
+    this.historyMenuState.syncTrigger(this.historyBtn, "nox-history-menu");
+  }
+
+  private renderHistoryMenu(): void {
+    if (!this.historyMenuEl) return;
+
+    this.historyMenuEl.empty();
+    this.historyPopover.setOpen(this.historyMenuState.isOpen);
+    this.syncHistoryTrigger();
+    if (!this.historyMenuState.isOpen) return;
+
+    const header = this.historyMenuEl.createDiv({ cls: "nox-history-header" });
+    header.createSpan({ cls: "nox-history-title", text: "Chat history" });
+    header.createSpan({
+      cls: "nox-history-hint",
+      text: "Stored in this vault",
+    });
+
+    const sessions = this.learning.listSessions();
+    if (sessions.length === 0) {
+      this.historyMenuEl.createDiv({
+        cls: "nox-history-empty",
+        text: "No conversations yet.",
+      });
+      this.historyMenuState.setRows([]);
+      return;
+    }
+
+    const rows: HTMLButtonElement[] = [];
+    const currentId = this.learning.getSession().id;
+    for (const session of sessions) {
+      const row = createNoxMenuRow(this.historyMenuEl, {
+        cls: "nox-history-row",
+        id: `nox-history-option-${session.id}`,
+        icon: "message-circle",
+        name: this.getHistoryTitle(session),
+        nameClass: "nox-history-row-name",
+        description: this.getHistoryPreview(session),
+        descriptionClass: "nox-history-row-preview",
+        command: this.formatHistoryTime(session.updatedAt),
+        commandClass: "nox-history-row-time",
+        selected: session.id === currentId,
+        trailingClass: "nox-history-row-check",
+        trailingIcon: session.id === currentId ? "check" : undefined,
+      });
+      row.addEventListener("click", () => {
+        void this.selectHistorySession(session.id);
+      });
+      rows.push(row);
+    }
+
+    this.historyMenuState.setRows(rows);
+    this.historyMenuState.syncRows();
+    animateNoxPopover(this.historyMenuEl);
+  }
+
+  private getHistoryTitle(session: ChatSession): string {
+    const firstPrompt = session.messages.find(
+      (message) => message.role === "user" && message.content.trim(),
+    )?.content.trim();
+    return firstPrompt ? this.truncateHistoryText(firstPrompt, 48) : "New session";
+  }
+
+  private getHistoryPreview(session: ChatSession): string {
+    const lastMessage = [...session.messages]
+      .reverse()
+      .find((message) => message.content.trim());
+    if (!lastMessage) return "No messages yet";
+
+    const count = session.messages.length;
+    return `${count} ${count === 1 ? "message" : "messages"} · ${this.truncateHistoryText(lastMessage.content, 52)}`;
+  }
+
+  private truncateHistoryText(text: string, maxLength: number): string {
+    const normalized = text.replace(/\s+/g, " ").trim();
+    return normalized.length > maxLength
+      ? `${normalized.slice(0, maxLength - 1)}…`
+      : normalized;
+  }
+
+  private formatHistoryTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    if (date.toDateString() === now.toDateString()) {
+      return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+
+  private async selectHistorySession(id: string): Promise<void> {
+    if (this.uiState === "RUNNING") return;
+
+    const session = await this.learning.selectSession(id);
+    if (!session) return;
+
+    this.closeHistoryMenu();
+    this.lastTurnRequest = null;
+    this.systemContextFiles = [];
+    this.extraCtx = [];
+    this.attachments = [];
+    this.renderAttachments();
+    this.closePromptMenu();
+    this.closeModelMenu();
+    this.setAction("ask");
+    await this.syncChips();
+    await this.restoreSession();
+    this.focusComposer();
   }
 
   private async refreshModelList(): Promise<void> {
     this.models = this.learning.getModels();
-    if (this.modelMenuOpen) this.modelMenuActive = this.getSelectedModelIndex();
+    if (this.modelMenuState.isOpen) {
+      this.modelMenuState.setActive(this.getSelectedModelIndex());
+    }
     this.syncModelTrigger();
     this.renderModelMenu();
   }
@@ -331,39 +483,28 @@ export class ChatView extends ItemView {
     const model = this.getModelMenuItems().find((item) => item.id === selected);
     const label = model?.name ?? "Runtime default";
 
-    this.modelTrigger.empty();
-    this.modelTrigger.createSpan({
-      cls: "nox-model-trigger-label",
-      text: label,
-    });
-    const chevron = this.modelTrigger.createSpan({
-      cls: "nox-model-trigger-chevron",
-    });
-    setNoxIcon(chevron, "chevron-down");
-    this.modelTrigger.setAttribute("aria-expanded", String(this.modelMenuOpen));
+    this.composerUi?.setModelLabel(label);
+    this.modelMenuState.syncTrigger(this.modelTrigger, "nox-model-menu");
     this.modelTrigger.setAttribute("aria-label", `Learning model: ${label}`);
   }
 
   private openModelMenu(): void {
     this.closePromptMenu();
-    this.modelMenuOpen = true;
-    this.modelMenuActive = this.getSelectedModelIndex();
+    this.modelMenuState.openAt(this.getSelectedModelIndex());
     this.syncModelTrigger();
     this.renderModelMenu();
   }
 
   private closeModelMenu(): void {
-    if (!this.modelMenuOpen && this.modelMenuRows.length === 0) return;
+    if (!this.modelMenuState.isOpen && !this.modelMenuEl?.hasChildNodes()) return;
 
-    this.modelMenuOpen = false;
-    this.modelMenuActive = 0;
-    this.modelMenuRows = [];
+    this.modelMenuState.close();
     this.syncModelTrigger();
     this.renderModelMenu();
   }
 
   private toggleModelMenu(): void {
-    if (this.modelMenuOpen) {
+    if (this.modelMenuState.isOpen) {
       this.closeModelMenu();
     } else {
       this.openModelMenu();
@@ -374,49 +515,50 @@ export class ChatView extends ItemView {
     if (!this.modelMenuEl) return;
 
     this.modelMenuEl.empty();
-    this.modelMenuRows = [];
-    this.modelMenuEl.toggleClass("nox-hidden", !this.modelMenuOpen);
+    this.modelPopover.setOpen(this.modelMenuState.isOpen);
     this.syncModelTrigger();
 
-    if (!this.modelMenuOpen) return;
+    if (!this.modelMenuState.isOpen) return;
 
     const selected = this.learning.getSession().model ?? "";
+    const rows: HTMLButtonElement[] = [];
     for (const [index, model] of this.getModelMenuItems().entries()) {
-      const row = this.modelMenuEl.createEl("button", {
-        cls: `nox-model-menu-row${index === this.modelMenuActive ? " is-active" : ""}`,
-        attr: {
-          type: "button",
-          role: "option",
-          "aria-selected": String(model.id === selected),
-        },
+      const row = createNoxMenuRow(this.modelMenuEl, {
+        cls: "nox-model-menu-row",
+        id: `nox-model-menu-option-${index}`,
+        name: model.name,
+        nameClass: "nox-model-menu-name",
+        selected: model.id === selected,
+        trailingClass: "nox-model-menu-check",
+        trailingIcon: model.id === selected ? "check" : undefined,
       });
-      row.createSpan({
-        cls: "nox-model-menu-name",
-        text: model.name,
-      });
-      const check = row.createSpan({ cls: "nox-model-menu-check" });
-      if (model.id === selected) setNoxIcon(check, "check");
 
       row.addEventListener("mouseenter", () => {
-        this.modelMenuActive = index;
+        this.modelMenuState.setActive(index);
         this.syncModelMenuRows();
       });
+      row.addEventListener("mousedown", (event) => event.preventDefault());
       row.addEventListener("click", () => this.selectModel(model.id));
-      this.modelMenuRows.push(row);
+      rows.push(row);
     }
 
+    this.modelMenuState.setRows(rows);
+    this.syncModelMenuRows();
     animateNoxPopover(this.modelMenuEl);
   }
 
   private syncModelMenuRows(): void {
     const selected = this.learning.getSession().model ?? "";
-    this.modelMenuRows.forEach((row, index) => {
-      row.toggleClass("is-active", index === this.modelMenuActive);
+    const rows = this.modelMenuEl?.querySelectorAll<HTMLButtonElement>(
+      ".nox-model-menu-row",
+    ) ?? [];
+    rows.forEach((row, index) => {
       row.setAttribute(
         "aria-selected",
         String(this.getModelMenuItems()[index]?.id === selected),
       );
     });
+    this.modelMenuState.syncTrigger(this.modelTrigger, "nox-model-menu");
   }
 
   private selectModel(modelId: string): void {
@@ -430,254 +572,112 @@ export class ChatView extends ItemView {
 
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      if (!this.modelMenuOpen) {
+      if (!this.modelMenuState.isOpen) {
         this.openModelMenu();
         return;
       }
 
       const direction = event.key === "ArrowDown" ? 1 : -1;
-      this.modelMenuActive =
-        (this.modelMenuActive + direction + items.length) % items.length;
+      this.modelMenuState.move(direction);
       this.syncModelMenuRows();
       return;
     }
 
-    if ((event.key === "Enter" || event.key === " ") && this.modelMenuOpen) {
+    if ((event.key === "Enter" || event.key === " ") && this.modelMenuState.isOpen) {
       event.preventDefault();
-      const model = items[this.modelMenuActive];
+      const model = items[this.modelMenuState.activeIndex];
       if (model) this.selectModel(model.id);
       return;
     }
 
-    if (event.key === "Escape" && this.modelMenuOpen) {
+    if (event.key === "Escape" && this.modelMenuState.isOpen) {
       event.preventDefault();
       this.closeModelMenu();
       return;
     }
 
-    if (event.key === "Tab" && this.modelMenuOpen) {
+    if (event.key === "Tab" && this.modelMenuState.isOpen) {
       this.closeModelMenu();
     }
   }
 
   private buildComposer(parent: HTMLElement): void {
-    this.contextRow = parent.createDiv({ cls: "nox-context-row nox-hidden" });
-    this.contextRow.createSpan({
-      cls: "nox-context-label",
-      text: "Using",
+    this.composerUi = new NoxComposer(parent, {
+      onInput: () => this.onInput(),
+      onKeyDown: (event) => this.onKey(event),
+      onFiles: (files) => void this.handleFiles(files),
+      onOpenSourceMenu: () => {
+        this.closeModelMenu();
+        if (this.promptMenu === "source") {
+          this.closePromptMenu();
+        } else {
+          this.promptMenu = "source";
+          this.promptMenuState.openAt(this.getPromptMenuStartIndex("source"));
+          void this.renderPromptMenu();
+        }
+        this.composerUi.focus();
+      },
+      onOpenCommandMenu: () => {
+        this.closeModelMenu();
+        if (this.promptMenu === "command") {
+          this.closePromptMenu();
+        } else {
+          this.promptMenu = "command";
+          this.promptMenuState.openAt(this.getPromptMenuStartIndex("command"));
+          void this.renderPromptMenu();
+        }
+        this.composerUi.focus();
+      },
+      onToggleModelMenu: () => this.toggleModelMenu(),
+      onModelKeyDown: (event) => this.onModelTriggerKey(event),
+      onCancel: () => {
+        this.learning.cancel();
+        this.composerUi.cancelBtn.disabled = true;
+      },
+      onSend: () => void this.doSend(),
     });
 
-    const chips = this.contextRow.createDiv({ cls: "nox-chips" });
-
-    this.selectionChip = chips.createSpan({
-      cls: "nox-chip nox-chip--hidden",
-    });
-    this.selectionChip.createSpan({ cls: "nox-chip-dot" });
-    this.selectionChip.createSpan({
-      cls: "nox-chip-label",
-      text: "@selection",
-    });
-
-    this.noteChip = chips.createSpan({
-      cls: "nox-chip nox-chip--hidden",
-    });
-    this.noteChip.createSpan({ cls: "nox-chip-dot" });
-    this.noteChip.createSpan({
-      cls: "nox-chip-label",
-      text: "@note",
-    });
-
-    this.systemChip = chips.createSpan({
-      cls: "nox-chip nox-chip--hidden",
-    });
-    this.systemChip.createSpan({ cls: "nox-chip-dot" });
-    this.systemChip.createSpan({
-      cls: "nox-chip-label",
-      text: "@nox-system",
-    });
-
-    const anchor = parent.createDiv({ cls: "nox-prompt-anchor" });
-    this.promptMenuEl = anchor.createDiv({
-      cls: "nox-prompt-menu nox-hidden",
-    });
-    this.promptMenuEl.id = "nox-prompt-menu";
-    this.promptMenuEl.setAttribute("role", "listbox");
-    this.promptMenuEl.setAttribute("aria-label", "Nox prompt actions");
-
-    this.modelMenuEl = anchor.createDiv({
-      cls: "nox-model-menu nox-hidden",
-    });
-    this.modelMenuEl.id = "nox-model-menu";
-    this.modelMenuEl.setAttribute("role", "listbox");
-    this.modelMenuEl.setAttribute("aria-label", "Learning models");
-
+    this.promptMenuEl = this.composerUi.promptMenuEl;
+    this.promptPopover = this.composerUi.promptPopover;
+    this.modelMenuEl = this.composerUi.modelMenuEl;
+    this.modelPopover = this.composerUi.modelPopover;
+    this.input = this.composerUi.input;
+    this.fileInput = this.composerUi.fileInput;
+    this.promptPlusBtn = this.composerUi.promptPlusBtn;
+    this.actionMenuBtn = this.composerUi.actionMenuBtn;
+    this.modelTrigger = this.composerUi.modelTrigger;
+    this.cancelBtn = this.composerUi.cancelBtn;
+    this.sendBtn = this.composerUi.sendBtn;
+    this.syncModelTrigger();
     this.registerDomEvent(document, "pointerdown", (event) => {
       const target = event.target;
-      if (target instanceof Node && anchor.contains(target)) return;
+      if (
+        target instanceof Node &&
+        (this.composerUi.anchor.contains(target) || this.headerEl.contains(target))
+      ) {
+        return;
+      }
       this.closePromptMenu();
       this.closeModelMenu();
+      this.closeHistoryMenu();
     });
-
-    const box = anchor.createDiv({ cls: "nox-composer-box" });
-    box.addEventListener("click", (event) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest("button")) return;
-      this.input.focus();
-    });
-
-    this.intentEl = box.createDiv({
-      cls: "nox-intent-row nox-hidden",
-    });
-
-    this.attachmentsEl = box.createDiv({
-      cls: "nox-attachments nox-hidden",
-    });
-
-    this.fileInput = box.createEl("input", {
-      cls: "nox-file-input",
-      attr: {
-        type: "file",
-        multiple: "",
-        accept: ".md,.txt,.csv,.json,.yaml,.yml",
-      },
-    });
-    this.fileInput.addEventListener("change", () => {
-      void this.handleFiles(this.fileInput.files);
-    });
-
-    const controls = box.createDiv({ cls: "nox-composer-controls" });
-
-    this.input = controls.createEl("textarea", {
-      cls: "nox-input",
-      attr: {
-        placeholder: "Ask anything about this note...",
-        rows: "1",
-        "aria-controls": "nox-prompt-menu",
-      },
-    });
-    this.input.addEventListener("input", () => this.onInput());
-    this.input.addEventListener("keydown", (event) => this.onKey(event));
-
-    const footer = box.createDiv({ cls: "nox-composer-footer" });
-    this.promptPlusBtn = footer.createEl("button", {
-      cls: "nox-prompt-plus",
-      attr: {
-        type: "button",
-        "aria-label": "Add context or file",
-        "aria-expanded": "false",
-      },
-    });
-    setNoxIcon(this.promptPlusBtn, "plus");
-    this.promptPlusBtn.title = "Add context or file";
-    this.promptPlusBtn.addEventListener("click", () => {
-      this.closeModelMenu();
-      this.promptMenu = this.promptMenu === "source" ? null : "source";
-      this.promptMenuActive = 0;
-      void this.renderPromptMenu();
-      this.input.focus();
-    });
-
-    const tools = footer.createDiv({ cls: "nox-composer-tools" });
-
-    this.actionMenuBtn = tools.createEl("button", {
-      cls: "nox-action-menu-btn",
-      attr: {
-        type: "button",
-        "aria-label": "Show Nox actions",
-        "aria-expanded": "false",
-      },
-    });
-    this.actionMenuBtn.createSpan({
-      cls: "nox-action-menu-key",
-      text: "/",
-    });
-    this.actionMenuBtn.createSpan({
-      text: "Actions",
-    });
-    this.actionMenuBtn.addEventListener("click", () => {
-      this.closeModelMenu();
-      this.promptMenu =
-        this.promptMenu === "command" ? null : "command";
-      this.promptMenuActive = 0;
-      void this.renderPromptMenu();
-      this.input.focus();
-    });
-
-    this.modelTrigger = tools.createEl("button", {
-      cls: "nox-model-trigger",
-      attr: {
-        type: "button",
-        "aria-controls": "nox-model-menu",
-        "aria-haspopup": "listbox",
-        "aria-expanded": "false",
-      },
-    });
-    this.modelTrigger.title = "Choose learning model";
-    this.modelTrigger.addEventListener("click", () => {
-      this.toggleModelMenu();
-    });
-    this.modelTrigger.addEventListener("keydown", (event) => {
-      this.onModelTriggerKey(event);
-    });
-    this.syncModelTrigger();
-
-    const btnGroup = footer.createDiv({ cls: "nox-btn-group" });
-
-    this.cancelBtn = btnGroup.createEl("button", {
-      cls: "nox-cancel-btn nox-hidden",
-      attr: { type: "button", "aria-label": "Stop generating" },
-    });
-    setNoxIcon(this.cancelBtn, "x");
-    this.cancelBtn.title = "Stop";
-    this.cancelBtn.setAttribute("aria-label", "Stop generating");
-    this.cancelBtn.addEventListener("click", () => {
-      this.learning.cancel();
-      this.cancelBtn.disabled = true;
-    });
-
-    this.sendBtn = btnGroup.createEl("button", {
-      cls: "nox-send-btn",
-      attr: { type: "button", "aria-label": "Send message" },
-    });
-    setNoxIcon(this.sendBtn, "arrow-up");
-    this.sendBtn.title = "Send message";
-    this.sendBtn.setAttribute("aria-label", "Send message");
-    this.sendBtn.disabled = true;
-    this.sendBtn.addEventListener("click", () => {
-      void this.doSend();
-    });
-
   }
 
   private renderAttachments(): void {
-    if (!this.attachmentsEl) return;
-
-    this.attachmentsEl.empty();
-    this.attachmentsEl.toggleClass("nox-hidden", this.attachments.length === 0);
-
-    for (const [index, attachment] of this.attachments.entries()) {
-      const chip = this.attachmentsEl.createDiv({
-        cls: "nox-attachment-chip",
-      });
-      const attachmentIcon = chip.createSpan({ cls: "nox-attachment-icon" });
-      setNoxIcon(attachmentIcon, "file-text");
-      chip.createSpan({ cls: "nox-attachment-name", text: attachment.name });
-
-      const remove = chip.createEl("button", {
-        cls: "nox-attachment-remove",
-        attr: {
-          type: "button",
-          "aria-label": `Remove ${attachment.name}`,
+    this.composerUi.setAttachments(
+      this.attachments.map((attachment) => ({
+        key: attachment.name,
+        text: attachment.name,
+        onRemove: () => {
+          const index = this.attachments.indexOf(attachment);
+          if (index < 0) return;
+          this.attachments.splice(index, 1);
+          this.extraCtx = this.attachments.map((item) => item.ref);
+          this.renderAttachments();
+          void this.syncChips();
         },
-      });
-      setNoxIcon(remove, "x");
-      remove.addEventListener("click", () => {
-        this.attachments.splice(index, 1);
-        this.extraCtx = this.attachments.map((item) => item.ref);
-        this.renderAttachments();
-        void this.syncChips();
-      });
-    }
+      })),
+    );
   }
 
   private async handleFiles(files: FileList | null): Promise<void> {
@@ -701,7 +701,7 @@ export class ChatView extends ItemView {
     this.renderAttachments();
     this.fileInput.value = "";
     await this.syncChips();
-    this.input.focus();
+    this.composerUi.focus();
   }
 
   private async getPromptMenuItems(): Promise<PromptMenuItem[]> {
@@ -711,6 +711,7 @@ export class ChatView extends ItemView {
         name: command.title,
         description: command.description,
         icon: command.icon,
+        command: command.command,
         action: { type: "learning" as const, kind: command.action },
       }));
     }
@@ -782,10 +783,11 @@ export class ChatView extends ItemView {
 
     const requestId = ++this.promptMenuRequest;
     this.promptMenuEl.empty();
-    this.promptMenuRows = [];
-    this.promptMenuEl.toggleClass("nox-hidden", this.promptMenu === null);
+    this.promptPopover.setOpen(this.promptMenuState.isOpen);
     this.syncPromptMenuControls();
     if (!this.promptMenu) {
+      this.promptMenuState.close();
+      this.promptPopover.close();
       this.input.removeAttribute("aria-expanded");
       this.input.removeAttribute("aria-activedescendant");
       return;
@@ -799,30 +801,30 @@ export class ChatView extends ItemView {
     if (requestId !== this.promptMenuRequest || !this.promptMenu) return;
 
     let interactiveIndex = 0;
+    const rowsForState: HTMLButtonElement[] = [];
     for (const item of rows) {
       const menuIndex = item.disabled ? -1 : interactiveIndex++;
-      const button = this.promptMenuEl.createEl("button", {
-        cls: `nox-prompt-menu-row${menuIndex === this.promptMenuActive ? " is-active" : ""}`,
-        attr: {
-          type: "button",
-          role: "option",
-          "aria-selected": String(menuIndex === this.promptMenuActive),
-        },
+      const button = createNoxMenuRow(this.promptMenuEl, {
+        cls: "nox-prompt-menu-row",
+        id: `nox-prompt-menu-option-${menuIndex}`,
+        icon: item.icon,
+        iconClass: "nox-prompt-menu-icon",
+        name: item.name,
+        nameClass: "nox-prompt-menu-name",
+        description: item.description,
+        descriptionClass: "nox-prompt-menu-description",
+        command: item.command,
+        commandClass: "nox-prompt-menu-command",
+        disabled: item.disabled,
       });
-      button.id = `nox-prompt-menu-option-${menuIndex}`;
-      button.disabled = Boolean(item.disabled);
-      const icon = button.createSpan({ cls: "nox-prompt-menu-icon" });
-      setNoxIcon(icon, item.icon);
-      button.createSpan({ cls: "nox-prompt-menu-name", text: item.name });
-      button.createSpan({ cls: "nox-prompt-menu-description", text: item.description });
 
       if (!item.disabled) {
         button.addEventListener("mouseenter", () => {
-          this.promptMenuActive = menuIndex;
+          this.promptMenuState.setActive(menuIndex);
           this.syncPromptMenuRows();
         });
         button.addEventListener("click", () => void this.pickPromptMenuItem(item));
-        this.promptMenuRows.push(button);
+        rowsForState.push(button);
       }
     }
 
@@ -832,6 +834,7 @@ export class ChatView extends ItemView {
         ? query ? "Select a note or attach a text file" : "Type @name to search vault notes"
         : "Choose a learning action",
     });
+    this.promptMenuState.setRows(rowsForState);
     this.syncPromptMenuRows();
     animateNoxPopover(this.promptMenuEl);
   }
@@ -842,16 +845,21 @@ export class ChatView extends ItemView {
 
     this.promptPlusBtn?.setAttribute("aria-expanded", String(sourceOpen));
     this.actionMenuBtn?.setAttribute("aria-expanded", String(commandOpen));
+    this.commandHintBtn?.setAttribute("aria-expanded", String(commandOpen));
+    this.commandHintBtn?.setAttribute("aria-controls", "nox-prompt-menu");
   }
 
   private syncPromptMenuRows(): void {
-    this.promptMenuRows.forEach((row, index) => {
-      const active = index === this.promptMenuActive;
-      row.toggleClass("is-active", active);
+    this.promptMenuState.syncRows();
+    const rows = this.promptMenuEl?.querySelectorAll<HTMLButtonElement>(
+      ".nox-prompt-menu-row:not(:disabled)",
+    ) ?? [];
+    rows.forEach((row, index) => {
+      const active = index === this.promptMenuState.activeIndex;
       row.setAttribute("aria-selected", String(active));
     });
 
-    const activeRow = this.promptMenuRows[this.promptMenuActive];
+    const activeRow = rows[this.promptMenuState.activeIndex];
     if (activeRow) {
       this.input.setAttribute("aria-activedescendant", activeRow.id);
     } else {
@@ -912,16 +920,40 @@ export class ChatView extends ItemView {
   private closePromptMenu(): void {
     this.promptMenuRequest += 1;
     this.promptMenu = null;
-    this.promptMenuActive = 0;
+    this.promptMenuState.close();
+    this.promptPopover.close();
     this.syncPromptMenuControls();
     void this.renderPromptMenu();
   }
 
+  private getPromptMenuStartIndex(menu: PromptMenuKind): number {
+    if (menu !== "command") return 0;
+
+    const selected = PROMPT_COMMANDS.findIndex(
+      (command) => command.action === this.selectedAction,
+    );
+    return selected >= 0 ? selected : 0;
+  }
+
   private setAction(action: LearningActionKind): void {
     this.selectedAction = action;
+    if (this.promptMenu === "command") {
+      this.promptMenuState.setActive(this.getPromptMenuStartIndex("command"));
+    }
     this.updatePlaceholder();
     this.renderIntent();
     this.syncCapabilityCards();
+    this.syncPromptMenuRows();
+  }
+
+  private runSelectionAction(action: NoxSelectionAction): void {
+    if (this.uiState === "RUNNING" || !this.currentContext?.selection) return;
+
+    this.setAction(action.learningAction);
+    this.input.value = action.prompt;
+    this.onInput();
+    this.composerUi.focus();
+    void this.doSend();
   }
 
   private syncCapabilityCards(): void {
@@ -933,29 +965,18 @@ export class ChatView extends ItemView {
   }
 
   private renderIntent(): void {
-    if (!this.intentEl) return;
-    this.intentEl.empty();
-
-    const visible = this.selectedAction !== "ask";
-    this.intentEl.toggleClass("nox-hidden", !visible);
-    if (!visible) return;
-
-    const label = ACTIONS.find((item) => item.kind === this.selectedAction)?.label ?? this.selectedAction;
-    const chip = this.intentEl.createDiv({
-      cls: `nox-intent-chip nox-intent-chip--${this.selectedAction}`,
-    });
-    animateNoxEnter(chip, 3);
-    chip.createSpan({ cls: "nox-intent-label", text: label });
-
-    const remove = chip.createEl("button", {
-      cls: "nox-intent-remove",
-      attr: { type: "button", "aria-label": `Exit ${label} mode` },
-    });
-    setNoxIcon(remove, "x");
-    remove.addEventListener("click", () => {
-      this.setAction("ask");
-      this.input.focus();
-    });
+    const label = this.selectedAction === "ask"
+      ? null
+      : ACTIONS.find((item) => item.kind === this.selectedAction)?.label ?? this.selectedAction;
+    const chip = this.composerUi.setIntent(
+      label,
+      `nox-intent-chip--${this.selectedAction}`,
+      () => {
+        this.setAction("ask");
+        this.composerUi.focus();
+      },
+    );
+    if (chip) animateNoxEnter(chip, 3);
   }
 
   private updatePlaceholder(): void {
@@ -992,25 +1013,15 @@ export class ChatView extends ItemView {
   private async syncChips(): Promise<void> {
     const context = await this.learning.resolveContext(this.extraCtx);
     this.currentContext = context;
-    this.systemChip.toggleClass(
-      "nox-chip--hidden",
-      this.systemContextFiles.length === 0,
+    this.syncContextChips();
+    this.selectionActions?.setSelection(
+      context.selection
+        ? {
+            file: context.selection.file,
+            content: context.selection.content,
+          }
+        : null,
     );
-
-    const hasSelection = Boolean(context.selection);
-    this.selectionChip.toggleClass("nox-chip--hidden", !hasSelection);
-
-    const activeNote = context.activeNote;
-    this.noteChip.toggleClass("nox-chip--hidden", !activeNote);
-
-    if (activeNote) {
-      const name = activeNote.path.split("/").pop() ?? activeNote.path;
-      const label = this.noteChip.querySelector<HTMLElement>(".nox-chip-label");
-      if (label) label.textContent = `@${name}`;
-      this.noteChip.title = activeNote.path;
-    }
-
-    this.syncContextVisibility();
 
     this.updatePlaceholder();
 
@@ -1022,53 +1033,75 @@ export class ChatView extends ItemView {
     }
   }
 
-  private syncContextVisibility(): void {
-    this.contextRow.toggleClass(
-      "nox-hidden",
-      !hasInspectableContext({
-        hasSelection: Boolean(this.currentContext?.selection),
-        hasActiveNote: Boolean(this.currentContext?.activeNote),
-        explicitCount: this.extraCtx.length,
-        systemCount: this.systemContextFiles.length,
-      }),
-    );
+  private syncContextChips(): void {
+    const contexts: NoxComposerContext[] = [];
+    const selection = this.currentContext?.selection;
+    if (selection) {
+      contexts.push({
+        key: "selection",
+        text: "@selection",
+        title: selection.file,
+        icon: "file-text",
+      });
+    }
+
+    const activeNote = this.currentContext?.activeNote;
+    if (activeNote) {
+      contexts.push({
+        key: "note",
+        text: `@${activeNote.path.split("/").pop() ?? activeNote.path}`,
+        title: activeNote.path,
+        icon: "file-text",
+      });
+    }
+
+    if (this.systemContextFiles.length > 0) {
+      contexts.push({
+        key: "system",
+        text: "@nox-system",
+        title: this.systemContextFiles.join("\n"),
+        icon: "file-text",
+      });
+    }
+
+    this.composerUi.setContexts(contexts);
   }
 
   private onInput(): void {
     this.closeModelMenu();
-    this.sendBtn.disabled =
-      !this.canSend() || this.uiState === "RUNNING";
+    this.composerUi.syncInputLayout();
+    this.composerUi.setSendEnabled(
+      this.canSend() && this.uiState !== "RUNNING" && this.uiState !== "ERROR",
+    );
 
     const token = parsePromptToken(this.input.value);
     if (token && this.promptMenu !== token.kind) {
       this.promptMenu = token.kind;
-      this.promptMenuActive = 0;
+      this.promptMenuState.openAt(this.getPromptMenuStartIndex(token.kind));
     } else if (!token) {
       this.closePromptMenu();
     }
 
     this.renderPromptMenu();
 
-    this.input.style.height = "auto";
-    this.input.style.height =
-      Math.min(this.input.scrollHeight, 80) + "px";
   }
 
   private onKey(event: KeyboardEvent): void {
-    if (this.promptMenu && this.promptMenuRows.length > 0) {
+    if (this.promptMenu && this.promptMenuState.rowCount > 0) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         const direction = event.key === "ArrowDown" ? 1 : -1;
-        this.promptMenuActive =
-          (this.promptMenuActive + direction + this.promptMenuRows.length) %
-          this.promptMenuRows.length;
+        this.promptMenuState.move(direction);
         this.syncPromptMenuRows();
         return;
       }
 
       if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
         event.preventDefault();
-        const row = this.promptMenuRows[this.promptMenuActive];
+        const rows = this.promptMenuEl?.querySelectorAll<HTMLButtonElement>(
+          ".nox-prompt-menu-row:not(:disabled)",
+        ) ?? [];
+        const row = rows[this.promptMenuState.activeIndex];
         if (row) row.click();
         return;
       }
@@ -1082,8 +1115,10 @@ export class ChatView extends ItemView {
     if (event.key === "Escape") {
       if (this.promptMenu) {
         this.closePromptMenu();
-      } else if (this.modelMenuOpen) {
+      } else if (this.modelMenuState.isOpen) {
         this.closeModelMenu();
+      } else if (this.historyMenuState.isOpen) {
+        this.closeHistoryMenu();
       } else if (this.uiState === "RUNNING") {
         this.cancelBtn.click();
       }
@@ -1122,7 +1157,7 @@ export class ChatView extends ItemView {
     this.closePromptMenu();
 
     this.input.value = "";
-    this.input.style.height = "";
+    this.composerUi.syncInputLayout();
     this.attachments = [];
     this.extraCtx = [];
     this.renderAttachments();
@@ -1139,7 +1174,7 @@ export class ChatView extends ItemView {
     this.runningAction = request.action;
     if (appendUserMessage) this.appendUserBubble(request.prompt);
     this.setUIState("RUNNING");
-    this.ensureAgentBubble();
+    this.ensureThinkingTrace();
 
     try {
       for await (const event of this.learning.run(request)) {
@@ -1159,31 +1194,37 @@ export class ChatView extends ItemView {
     if (event.type === "context-ready") {
       this.currentContext = event.context.resolved;
       this.systemContextFiles = event.context.system.map((item) => item.file);
-      this.systemChip.toggleClass("nox-chip--hidden", event.context.system.length === 0);
-      this.systemChip.title = this.systemContextFiles.join("\n");
-      this.syncContextVisibility();
+      this.syncContextChips();
+      this.setThinkingStage(1);
       return;
     }
 
     if (event.type === "response-delta") {
       const shouldFollow = this.isNearThreadBottom();
+      this.setThinkingStage(2);
       this.appendToAgentBubble(event.text);
       if (shouldFollow) this.scrollThread("auto");
       return;
     }
 
     if (event.type === "practice-question") {
+      this.setThinkingStage(2);
+      this.ensureAgentBubble();
       this.appendPracticeQuestion(event.question);
       return;
     }
 
     if (event.type === "practice-evaluation") {
+      this.setThinkingStage(2);
+      this.ensureAgentBubble();
       this.appendPracticeEvaluation(event.evaluation);
       if (!event.evaluation.nextQuestion?.trim()) this.setAction("ask");
       return;
     }
 
     if (event.type === "review-findings") {
+      this.setThinkingStage(2);
+      this.ensureAgentBubble();
       this.appendReviewFindings(event.findings);
       return;
     }
@@ -1251,7 +1292,6 @@ export class ChatView extends ItemView {
     this.renderMarkdownResponse();
     if (doneLabel === undefined) this.appendStreamActions();
     this.settleThinking(doneLabel ?? `Completed in ${elapsed}`);
-    if (this.responseTimeEl) this.responseTimeEl.textContent = `for ${elapsed}`;
     this.stopLoadingTimer();
     this.agentCursorEl?.removeClass("nox-bubble--streaming");
     this.agentCursorEl = null;
@@ -1263,7 +1303,6 @@ export class ChatView extends ItemView {
     this.thinkingPanelEl = null;
     this.thinkingRows = [];
     this.thinkingManualExpanded = null;
-    this.responseTimeEl = null;
   }
 
   private settleThinking(doneLabel: string): void {
@@ -1291,6 +1330,30 @@ export class ChatView extends ItemView {
     this.thinkingChevronEl?.toggleClass("is-expanded", expanded);
   }
 
+  private setThinkingStage(activeIndex: number): void {
+    if (!this.thinkingRows.length) return;
+
+    for (const [index, row] of this.thinkingRows.entries()) {
+      const marker = row.firstElementChild as HTMLElement | null;
+      const isDone = index < activeIndex;
+      const isActive = index === activeIndex;
+
+      row.toggleClass("nox-hidden", index > activeIndex);
+      row.toggleClass("is-active", isActive);
+      row.toggleClass("is-done", isDone);
+
+      if (!marker) continue;
+      marker.toggleClass("nox-thinking-marker--spinner", isActive);
+      marker.textContent = isDone ? "✓" : "";
+    }
+
+    if (activeIndex > 0 && this.thinkingManualExpanded === null) {
+      this.thinkingPanelEl?.addClass("is-expanded");
+      this.thinkingToggleEl?.setAttribute("aria-expanded", "true");
+      this.thinkingChevronEl?.addClass("is-expanded");
+    }
+  }
+
   private startLoadingTimer(): void {
     if (this.loadingTimer !== null) {
       window.clearInterval(this.loadingTimer);
@@ -1300,7 +1363,6 @@ export class ChatView extends ItemView {
     const update = () => {
       const elapsed = this.formatElapsed(Date.now() - this.loadingStartedAt);
       if (this.loadingElapsedEl) this.loadingElapsedEl.textContent = elapsed;
-      if (this.responseTimeEl) this.responseTimeEl.textContent = `for ${elapsed}`;
     };
 
     this.loadingStartedAt = Date.now();
@@ -1329,11 +1391,12 @@ export class ChatView extends ItemView {
     this.uiState = state;
 
     const busy = state === "RUNNING";
-    this.cancelBtn.disabled = !busy;
-    this.input.disabled = busy || state === "ERROR";
-    this.sendBtn.disabled =
-      busy || state === "ERROR" || !this.canSend();
-    this.cancelBtn.toggleClass("nox-hidden", !busy);
+    this.selectionActions?.setBusy(busy);
+    this.composerUi.setState({
+      busy,
+      disabled: state === "ERROR",
+      canSend: this.canSend(),
+    });
   }
 
   private canSend(): boolean {
@@ -1383,11 +1446,14 @@ export class ChatView extends ItemView {
       attr: {
         type: "button",
         "aria-label": "Show all Nox actions",
+        "aria-controls": "nox-prompt-menu",
+        "aria-expanded": "false",
       },
     });
+    this.commandHintBtn = commandHint;
     commandHint.addEventListener("click", () => {
       this.promptMenu = "command";
-      this.promptMenuActive = 0;
+      this.promptMenuState.openAt(this.getPromptMenuStartIndex("command"));
       void this.renderPromptMenu();
       this.focusComposer();
     });
@@ -1453,9 +1519,7 @@ export class ChatView extends ItemView {
     const context = this.currentContext;
     if (!context?.selection && !context?.activeNote) return;
 
-    const wrap = parent.createDiv({
-      cls: "nox-empty-context",
-    });
+    const wrap = createNoxSurface(parent, "nox-empty-context");
     const left = wrap.createDiv({
       cls: "nox-empty-context-main",
     });
@@ -1503,7 +1567,7 @@ export class ChatView extends ItemView {
         continue;
       }
       if (message.content.trim()) {
-        await this.appendRestoredAssistant(message.content);
+        await this.appendRestoredAssistant(message.content, message.sourcePath);
       }
       if (message.proposal) {
         this.appendRestoredProposal(message);
@@ -1513,17 +1577,21 @@ export class ChatView extends ItemView {
     this.scrollThread();
   }
 
-  private async appendRestoredAssistant(markdown: string): Promise<void> {
+  private async appendRestoredAssistant(
+    markdown: string,
+    messageSourcePath?: string,
+  ): Promise<void> {
     const bubble = this.thread.createDiv({
       cls: "nox-bubble nox-bubble--agent",
     });
-    const meta = bubble.createDiv({ cls: "nox-response-meta" });
-    meta.createSpan({ cls: "nox-response-label", text: "Nox" });
-    meta.createSpan({ cls: "nox-response-sub", text: "Restored" });
+    createNoxMessageMeta(bubble, {
+      label: "Nox",
+      sub: "Restored",
+    });
     const content = bubble.createDiv({
       cls: "nox-bubble-content nox-markdown",
     });
-    const sourcePath =
+    const sourcePath = messageSourcePath ??
       this.currentContext?.selection?.file ??
       this.currentContext?.activeNote?.path ??
       "Nox.md";
@@ -1534,6 +1602,7 @@ export class ChatView extends ItemView {
       sourcePath,
       this,
     );
+    this.wireMarkdownLinks(content, sourcePath);
   }
 
   private appendRestoredProposal(message: ChatMessage): void {
@@ -1547,8 +1616,14 @@ export class ChatView extends ItemView {
       stale: "⚠ Expired after restart",
       pending: "⚠ Expired after restart",
     };
-    wrap.createDiv({
+    const resultKind = state === "applied"
+      ? "success"
+      : state === "rejected"
+        ? "neutral"
+        : "warning";
+    createNoxStatus(wrap, {
       cls: `nox-result-badge nox-badge--${state === "applied" ? "applied" : state === "rejected" ? "rejected" : "stale"}`,
+      kind: resultKind,
       text: labels[state],
     });
   }
@@ -1576,10 +1651,10 @@ export class ChatView extends ItemView {
     });
 
     const actions = slate.createDiv({ cls: "nox-error-actions" });
-    const retry = actions.createEl("button", {
+    const retry = createNoxButton(actions, {
       cls: "nox-retry-btn",
+      variant: "accent",
       text: "Retry",
-      attr: { type: "button" },
     });
     retry.addEventListener("click", () => {
       retry.disabled = true;
@@ -1587,10 +1662,10 @@ export class ChatView extends ItemView {
       void this.retryRuntime();
     });
 
-    const configure = actions.createEl("button", {
+    const configure = createNoxButton(actions, {
       cls: "nox-configure-btn",
+      variant: "secondary",
       text: "Configure Nox",
-      attr: { type: "button" },
     });
     configure.addEventListener("click", () => {
       this.openSettings();
@@ -1608,24 +1683,28 @@ export class ChatView extends ItemView {
     animateNoxEnter(bubble, 4);
   }
 
-  private ensureAgentBubble(): void {
-    if (this.agentCursorEl) return;
-
+  private ensureThinkingTrace(): void {
+    if (this.statusEl) return;
     this.statusEl = this.buildThinkingTrace();
+  }
+
+  private ensureAgentBubble(streaming = false): void {
+    this.ensureThinkingTrace();
+    if (this.agentCursorEl) {
+      this.agentCursorEl.toggleClass("nox-bubble--streaming", streaming);
+      return;
+    }
 
     this.agentCursorEl = this.thread.createDiv({
-      cls: "nox-bubble nox-bubble--agent nox-bubble--streaming",
+      cls: `nox-bubble nox-bubble--agent${streaming ? " nox-bubble--streaming" : ""}`,
     });
-    const meta = this.agentCursorEl.createDiv({ cls: "nox-response-meta" });
-    meta.createSpan({ cls: "nox-response-label", text: "Nox" });
-    meta.createSpan({
-      cls: "nox-response-sub",
-      text:
+    createNoxMessageMeta(this.agentCursorEl, {
+      label: "Nox",
+      sub:
         ACTIONS.find(
           (action) => action.kind === (this.runningAction ?? this.selectedAction),
         )?.label ?? "Response",
     });
-    this.responseTimeEl = meta.createSpan({ cls: "nox-response-time", text: "for 0.0s" });
     this.agentContentEl = this.agentCursorEl.createDiv({
       cls: "nox-bubble-content",
     });
@@ -1650,7 +1729,7 @@ export class ChatView extends ItemView {
 
     this.thinkingLabelEl = toggle.createSpan({
       cls: "nox-thinking-label nox-thinking-label--active",
-      text: "Working",
+      text: "Thinking",
     });
     this.loadingElapsedEl = toggle.createSpan({ cls: "nox-thinking-elapsed" });
     this.loadingElapsedEl.setAttribute("aria-hidden", "true");
@@ -1665,24 +1744,24 @@ export class ChatView extends ItemView {
     const source = this.currentContext?.selection?.file ?? this.currentContext?.activeNote?.path;
     const facts: Array<{ primary: string; secondary?: string }> = [
       {
-        primary: this.currentContext?.selection
-          ? "Current selection"
-          : this.currentContext?.activeNote ? "Current note" : "No automatic note context",
+        primary: "Resolving context",
         secondary: source?.split("/").pop(),
       },
       {
-        primary: "Learning intent",
-        secondary: ACTIONS.find((action) => action.kind === this.runningAction)?.label ?? "Ask",
+        primary: `Running ${ACTIONS.find((action) => action.kind === this.runningAction)?.label ?? "Ask"}`,
       },
+      { primary: "Generating response" },
     ];
 
     this.thinkingRows = facts.map((fact) => {
-      const row = list.createDiv({ cls: "nox-thinking-row is-done" });
-      row.createSpan({ cls: "nox-thinking-marker", text: "·" });
+      const row = list.createDiv({ cls: "nox-thinking-row nox-hidden" });
+      row.createSpan({ cls: "nox-thinking-marker" });
       row.createSpan({ cls: "nox-thinking-primary", text: fact.primary });
       if (fact.secondary) row.createSpan({ cls: "nox-thinking-secondary", text: fact.secondary });
       return row;
     });
+
+    this.setThinkingStage(0);
 
     toggle.addEventListener("click", () => {
       const expanded = !panel.hasClass("is-expanded");
@@ -1698,6 +1777,7 @@ export class ChatView extends ItemView {
   }
 
   private appendToAgentBubble(text: string): void {
+    this.ensureAgentBubble(true);
     if (!this.agentContentEl) return;
 
     this.streamedResponseText += text;
@@ -1753,11 +1833,37 @@ export class ChatView extends ItemView {
     content.empty();
     content.addClass("nox-markdown");
 
-    void MarkdownRenderer.render(this.app, markdown, content, sourcePath, this).catch(() => {
-      content.empty();
-      content.removeClass("nox-markdown");
-      content.addClass("nox-markdown-error");
-      content.setText("Markdown response could not be rendered.");
+    void MarkdownRenderer.render(this.app, markdown, content, sourcePath, this)
+      .then(() => this.wireMarkdownLinks(content, sourcePath))
+      .catch(() => {
+        content.empty();
+        content.removeClass("nox-markdown");
+        content.addClass("nox-markdown-error");
+        content.setText("Markdown response could not be rendered.");
+      });
+  }
+
+  private wireMarkdownLinks(content: HTMLElement, sourcePath: string): void {
+    this.registerDomEvent(content, "click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const anchor = target.closest("a");
+      if (!(anchor instanceof HTMLAnchorElement) || !content.contains(anchor)) {
+        return;
+      }
+
+      const linkText = resolveNoxMarkdownLink(
+        anchor.dataset.href ?? anchor.getAttribute("href"),
+        anchor.classList.contains("internal-link"),
+      );
+      if (!linkText) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const newLeaf = event.ctrlKey || event.metaKey || event.button === 1;
+      void this.app.workspace.openLinkText(linkText, sourcePath, newLeaf);
     });
   }
 
@@ -1768,13 +1874,11 @@ export class ChatView extends ItemView {
     const actions = this.agentCursorEl.createDiv({
       cls: "nox-stream-actions",
     });
-    const copyButton = actions.createEl("button", {
+    const copyButton = createNoxButton(actions, {
       cls: "nox-stream-action",
+      variant: "quiet",
+      label: "Copy response",
       text: "Copy",
-      attr: {
-        type: "button",
-        "aria-label": "Copy response",
-      },
     });
 
     copyButton.addEventListener("click", async () => {
@@ -1796,9 +1900,7 @@ export class ChatView extends ItemView {
   ): void {
     if (!this.agentCursorEl) return;
 
-    const card = this.agentCursorEl.createDiv({
-      cls: "nox-practice-card",
-    });
+    const card = createNoxSurface(this.agentCursorEl, "nox-practice-card");
     card.createDiv({
       cls: "nox-practice-label",
       text: `Practice · ${question.concept}`,
@@ -1823,9 +1925,10 @@ export class ChatView extends ItemView {
   ): void {
     if (!this.agentCursorEl) return;
 
-    const card = this.agentCursorEl.createDiv({
-      cls: `nox-practice-evaluation nox-outcome--${evaluation.outcome}`,
-    });
+    const card = createNoxSurface(
+      this.agentCursorEl,
+      `nox-practice-evaluation nox-outcome--${evaluation.outcome}`,
+    );
 
     const outcomeLabel =
       evaluation.outcome === "correct"
@@ -1875,18 +1978,19 @@ export class ChatView extends ItemView {
     });
 
     for (const finding of findings) {
-      const card = wrap.createDiv({
-        cls: `nox-review-card nox-review-card--${finding.kind}`,
-      });
+      const card = createNoxSurface(
+        wrap,
+        `nox-review-card nox-review-card--${finding.kind}`,
+      );
       card.createDiv({ cls: "nox-review-kind", text: finding.kind.replace("-", " ") });
       card.createDiv({ cls: "nox-review-title", text: finding.title });
       card.createDiv({ cls: "nox-review-detail", text: finding.detail });
 
       const actions = card.createDiv({ cls: "nox-review-actions" });
-      const practice = actions.createEl("button", {
+      const practice = createNoxButton(actions, {
         cls: "nox-review-action",
+        variant: "quiet",
         text: "Practice",
-        attr: { type: "button" },
       });
       practice.addEventListener("click", () => {
         this.setAction("practice");
@@ -1895,10 +1999,10 @@ export class ChatView extends ItemView {
         this.input.focus();
       });
 
-      const fix = actions.createEl("button", {
+      const fix = createNoxButton(actions, {
         cls: "nox-review-action",
+        variant: "quiet",
         text: "Fix",
-        attr: { type: "button" },
       });
       fix.addEventListener("click", () => {
         this.setAction("edit");
@@ -1936,21 +2040,24 @@ export class ChatView extends ItemView {
       cls: "nox-proposal-actions",
     });
 
-    const rejectBtn = actions.createEl("button", {
+    const rejectBtn = createNoxButton(actions, {
       cls: "nox-btn-reject",
+      variant: "secondary",
       text: "Reject",
     });
 
-    const applyBtn = actions.createEl("button", {
+    const applyBtn = createNoxButton(actions, {
       cls: "nox-btn-apply",
+      variant: "primary",
       text: "Apply ✓",
     });
 
     rejectBtn.addEventListener("click", () => {
       void this.learning.rejectProposal(edit.id);
       actions.remove();
-      wrap.createDiv({
+      createNoxStatus(wrap, {
         cls: "nox-result-badge nox-badge--rejected",
+        kind: "neutral",
         text: "✕ Rejected",
       });
       this.setUIState("ANSWER");
@@ -1964,14 +2071,16 @@ export class ChatView extends ItemView {
       actions.remove();
 
       if (result.ok) {
-        wrap.createDiv({
+        createNoxStatus(wrap, {
           cls: "nox-result-badge nox-badge--applied",
+          kind: "success",
           text: "✓ Applied to " + proposal.file,
         });
         this.setUIState("APPLIED");
       } else {
-        wrap.createDiv({
+        createNoxStatus(wrap, {
           cls: "nox-result-badge nox-badge--stale",
+          kind: "warning",
           text: "⚠ " + result.message,
         });
         this.setUIState("ANSWER");
@@ -1982,7 +2091,7 @@ export class ChatView extends ItemView {
   }
 
   private renderProposal(proposal: EditProposal): HTMLElement {
-    const wrap = this.thread.createDiv({ cls: "nox-proposal" });
+    const wrap = createNoxSurface(this.thread, "nox-proposal", "approval");
     wrap.createDiv({
       cls: "nox-proposal-badge",
       text: "📄 " + proposal.file,
@@ -2006,23 +2115,18 @@ export class ChatView extends ItemView {
     message: string,
     retry?: () => void,
   ): void {
-    const row = parent.createDiv({
+    createNoxStatus(parent, {
       cls: `nox-inline-status nox-inline-status--${kind}`,
-    });
-
-    row.createSpan({
-      cls: "nox-inline-status-message",
+      kind: kind === "failed" ? "error" : "neutral",
       text: kind === "failed" ? "⚠ " + message : message,
+      action: retry
+        ? {
+            cls: "nox-inline-status-retry",
+            label: "Retry",
+            onClick: retry,
+          }
+        : undefined,
     });
-
-    if (retry) {
-      const button = row.createEl("button", {
-        cls: "nox-inline-status-retry",
-        text: "Retry",
-        attr: { type: "button" },
-      });
-      button.addEventListener("click", retry);
-    }
 
     this.scrollThread();
   }
