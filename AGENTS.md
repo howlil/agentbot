@@ -1,375 +1,454 @@
-# Nox Engineering Workflow
+# AGENTS.md
 
-Nox is an Obsidian Learning OS plugin. Develop it as a product, not as a collection
-of files: start from observable behavior, give every rule one owner, change the
-smallest complete slice, verify the boundary that can actually fail, then ship.
+Scope: entire repository.
 
-The product contract lives in `.agents/product.md`.
-Interaction states live in `.agents/interaction-spec.md`.
-Detailed verification guidance lives in `.agents/testing.md`.
-UI work must follow `DESIGN.md`.
+## Goal
 
-## 1. Default workflow
+Ship the smallest correct Nox product slice quickly, with clear ownership and
+verification proportional to real risk.
 
-Use this loop for every non-trivial task:
+Default workflow:
 
 ```text
 UNDERSTAND
 → MODEL ONLY WHAT MATTERS
-→ IMPLEMENT ONE VERTICAL SLICE
+→ IMPLEMENT
 → VERIFY ACTUAL RISK
-→ INSPECT DIFF
 → SHIP
 ```
 
-Do not add ceremony between these steps unless the risk requires it.
+Do not optimize for ceremony, maximum abstraction, maximum test count, or
+architecture purity. Optimize for short feedback loops, one owner per rule,
+correctness, maintainability, and low regression risk.
 
-### UNDERSTAND
+---
 
-Before editing, identify:
+## Canonical product context
 
-```text
-observable outcome
-→ caller
-→ responsibility
-→ state / dependency
-→ side effect
-→ consumer
-```
+Before changing behavior, use these repository contracts:
 
-Answer these questions:
+- `.agents/PRODUCT_DESIGN.md` — product behavior, user flows, states, scope, and product acceptance criteria.
+- `DESIGN.md` — detailed UI and visual rules.
+- `.agents/ENGINEERING_DESIGN.md` — architecture, boundaries, state ownership, runtime, persistence, testing, and migration direction.
 
-- What behavior must change for the user?
-- Who initiates it?
-- Which rule decides the result?
-- What state is read or changed?
-- Which external side effect can happen?
-- Who consumes the result?
-- What is the highest-risk failure?
-- What is the smallest proof that would catch it?
+A direct user instruction overrides these documents. If the requested behavior
+intentionally changes a canonical contract, update the relevant document in the
+same task.
 
-Read only the code and docs needed to answer those questions.
+Do not silently redesign product behavior while implementing engineering work.
 
-Do not begin with "which files should I refactor?". Begin with behavior.
+---
 
-### MODEL ONLY WHAT MATTERS
+# 1. Understand
 
-For a non-trivial path, reduce it to the smallest useful execution graph:
+Before editing code:
+
+1. inspect the smallest relevant area;
+2. identify the observable outcome requested;
+3. identify callers, state, dependencies, side effects, and consumers;
+4. identify the highest-risk failure mode;
+5. define concrete acceptance criteria.
+
+Use this graph when the change is non-trivial:
 
 ```text
 input / caller
-→ application responsibility
-→ domain rule
-→ state / dependency
-→ side effect
+→ responsibility
+→ state + dependencies
+→ side effects
 → output / consumer
 ```
 
-Every business rule must have exactly one canonical owner.
+Do not audit or redesign unrelated architecture.
 
-If the same decision exists in UI, controller, persistence, and adapter code,
-stop expanding it. Pick the correct owner and route callers through it.
+If existing behavior is unclear, inspect it before replacing it.
+
+---
+
+# 2. Model only what matters
+
+Choose one canonical owner for every rule.
+
+Examples:
+
+```text
+learning evidence transition
+→ learning-state domain
+
+practice lifecycle
+→ practice state machine
+
+visible / sent context
+→ ContextResolver
+
+agent process + provider protocol
+→ AgentAdapter implementation
+
+structured model block parsing
+→ StructuredStreamParser
+
+conversation persistence
+→ session persistence boundary
+
+Markdown replacement validity
+→ mutation logic
+
+visual state
+→ UI
+```
+
+Do not duplicate the same decision across UI, controller, store, session, and
+adapter layers.
 
 Prefer:
 
 ```text
-adapter / UI
+UI / adapter
 → application use case
 → domain rule
 → port
 → infrastructure adapter
 ```
 
+Avoid speculative abstractions.
+
+Create an interface, service, repository, or helper when it establishes a real
+boundary, removes proven duplication, or makes important behavior independently
+testable. Do not create abstractions merely because they may be useful later.
+
+---
+
+# 3. Implement the smallest vertical slice
+
+Prefer an end-to-end behavior slice over building disconnected architecture in
+advance.
+
+Good:
+
+```text
+practice answer
+→ evaluate
+→ transition learning state
+→ persist evidence
+→ render next state
+```
+
 Avoid:
 
 ```text
-UI → persistence
-UI → provider protocol
-store → business policy
-adapter → product state transition
-multiple modules independently deciding the same rule
+create generic domain framework
+→ create generic repository framework
+→ migrate every module
+→ no user-visible behavior completed
 ```
 
-Existing boundary drift may still exist. Do not rewrite unrelated areas merely
-to make the graph ideal. When a task crosses a bad boundary, improve only the
-part required to make that slice safe.
+Rules:
 
-## 2. Ownership
+- reuse the canonical path before introducing a second pattern;
+- keep source-of-truth ownership explicit;
+- keep adapters thin;
+- keep domain rules independent from Obsidian and provider details;
+- do not leave parallel legacy paths after migration unless compatibility requires them;
+- do not broaden the task with unrelated cleanup;
+- remove code made dead by the change.
 
-These are the target ownership boundaries. Do not introduce new violations.
-
-| Concern | Canonical owner |
-| --- | --- |
-| Obsidian registration and composition | `src/main.ts` |
-| UI rendering and user intent | chat/UI layer |
-| Learning-turn orchestration | application/learning use case |
-| Practice transition rules | practice domain/state machine |
-| Learning evidence and gap transitions | learning-state domain rules |
-| Visible and agent context | `ContextResolver` |
-| Vault-root learning policy | `PolicyLoader` |
-| Structured agent-output parsing | `StructuredStreamParser` |
-| Provider process/protocol | `AgentAdapter` implementation |
-| Conversation persistence | session/conversation persistence boundary |
-| Learning-state persistence | learning-state repository/store |
-| Markdown replacement validity | mutation logic |
-| Obsidian editor write | Obsidian mutation boundary |
-
-Important distinctions:
-
-```text
-business rule ≠ persistence rule
-conversation persistence ≠ agent execution
-provider protocol ≠ product event
-UI state ≠ domain state
-```
-
-A type such as `Pick<ConcreteClass, ...>` may reduce the visible API, but it does
-not by itself create a real architecture boundary. Prefer explicit ports when a
-dependency genuinely needs inversion; do not create interfaces speculatively.
-
-## 3. Implement one vertical slice
-
-A change should be independently understandable, runnable, and verifiable.
-
-Prefer:
-
-```text
-one observable behavior
-→ minimum ownership correction needed
-→ implementation
-→ focused proof
-→ ship
-```
-
-Do not default to horizontal rewrites such as:
-
-```text
-create all abstractions
-→ move every file
-→ migrate every caller
-→ finally make behavior work
-```
+For bug fixes, reproduce the failure first when practical.
 
 Use compatibility facades when they let a boundary improve incrementally without
 forcing a rewrite.
 
-Keep the public surface small. Reuse the existing canonical path before creating
-another path. When a new implementation supersedes an old one, remove the old
-path unless compatibility is explicitly required.
+---
 
-Do not mix a feature with unrelated cleanup, dependency upgrades, formatting
-sweeps, or speculative architecture work.
+# 4. Testing strategy
 
-### Refactor rule
+Testing is risk-driven.
 
-Refactor when it reduces a concrete risk in the current change:
+Test public or observable behavior rather than implementation details.
 
-```text
-current task
-→ duplicated / misplaced rule creates unsafe change
-→ correct that ownership
-→ complete task
-```
+## TDD by default
 
-File size alone is not a refactor reason.
-
-A large file is a problem when it causes ownership ambiguity, duplicated rules,
-unsafe changes, or verification that is too broad.
-
-Do not introduce RAG, embeddings, background autonomy, multi-agent workflows,
-or provider proliferation before the core Learning OS loop requires them.
-
-## 4. Tests and verification
-
-Verification follows actual risk, not habit.
-
-During implementation, run the narrowest faithful proof first.
-
-| Change | First proof |
-| --- | --- |
-| Pure rule / state transition | focused unit test |
-| Parser behavior | focused parser regression test, including split-stream boundaries |
-| Context precedence | context behavior test |
-| Session or learning persistence | repository/store integration proof |
-| Agent process / cancellation | adapter/process integration proof |
-| Markdown mutation | stale/ambiguous replacement + editor boundary proof |
-| UI behavior | affected flow inspection + typecheck/build |
-| Packaging | generated artifact / target-path inspection |
-
-Use TDD by default for:
+Write or identify a failing behavioral test first for:
 
 - business rules;
-- state transitions;
+- lifecycle and state transitions;
 - validation;
 - parser behavior;
+- context precedence;
+- data transformation;
+- mutation safety;
 - bug regressions.
 
-Do not force TDD for:
+Flow:
+
+```text
+failing test
+→ confirm intended failure
+→ smallest implementation
+→ green
+→ refactor if needed
+→ targeted verification
+```
+
+Do not force TDD mechanically for:
 
 - documentation;
-- CSS-only changes;
-- simple wiring;
+- generated files;
+- simple configuration;
+- dependency metadata;
+- purely visual styling;
 - mechanical renames;
 - composition-root edits with no behavior change.
 
-Every bug fix should reproduce the old failure before or alongside the fix when
-practical.
+## Verify the actual risk
 
-Do not optimize for coverage percentage. Optimize for proving the changed rule
-and the boundary most likely to fail.
+Start with the narrowest useful check.
 
-### Fast feedback
+| Change | Minimum useful verification |
+| --- | --- |
+| Pure domain rule | focused unit test |
+| Bug fix | regression test + focused suite |
+| Structured stream parser | split-boundary + invalid-schema tests |
+| Context resolution | selection/current-note/explicit-context behavior |
+| Session or learning persistence | repository/store integration proof |
+| Agent process or cancellation | adapter/process integration proof |
+| Markdown mutation | stale/ambiguous + editor boundary proof |
+| UI interaction | affected flow inspection + typecheck/build |
+| Style-only UI | type/build + visual verification |
+| Packaging | artifact identity + target-path inspection |
+| Docs only | links + consistency review |
 
-Use focused tests while iterating.
+Run broader checks only when the blast radius justifies them or before shipping
+a change that crosses major boundaries.
 
-Before shipping a meaningful code slice, use the repository gate appropriate to
-its blast radius. The standard full code gate is:
+A passing suite is not proof of correctness if the risky behavior is not covered.
 
-```powershell
+The standard repository gate is:
+
+```sh
 pnpm verify
 pnpm lint
 git diff --check
 ```
 
-`pnpm verify` covers typecheck, unit tests, integration tests, production build,
-and artifact checks according to the repository scripts.
+If a baseline tool cannot run because of repository configuration, report the
+exact failure. Do not call it green.
 
-If lint or another baseline tool cannot run because of repository configuration,
-report the exact existing failure. Do not call it green.
+Real Obsidian behavior is release-level proof when native editor history,
+selection retention, plugin lifecycle, or live process integration is involved.
 
-Run deeper real-Obsidian/process/filesystem verification only when the changed
-boundary requires it. Follow `.agents/testing.md`.
+---
 
-Never treat typecheck or build success as proof of live Obsidian behavior.
+# 5. Nox-specific invariants
 
-## 5. Nox invariants
+These are architectural constraints, not preferences.
 
-These rules protect product correctness and override implementation convenience.
+## Learning
 
-### Learning evidence
+- A normal question is not mastery evidence.
+- Only meaningful evidence may change durable learning state.
+- Practice evaluation may create learner evidence.
+- Review findings describe material quality; they must not silently become learner weakness.
+- One correct answer may improve a gap when the domain rule allows it, but it is not automatic mastery.
 
-```text
-interaction
-→ meaningful evidence?
-→ evidence
-→ learning-state transition
-→ persist
-```
-
-A normal question is not mastery evidence. One correct answer must not
-automatically mean mastery unless the domain rule explicitly establishes it.
-
-### Practice
+## Practice
 
 ```text
-generate question
-→ wait for answer
-→ evaluate
-→ record evidence
-→ next question or complete
+question
+→ waiting for answer
+→ evaluating
+├─ failure / cancel / timeout → same active question
+└─ evaluation
+   ├─ next question → waiting for answer
+   └─ no next question → complete
 ```
 
-The plugin owns practice state transitions. The model supplies content and
-evaluation data; it does not own lifecycle state.
+The plugin owns practice lifecycle state. The model supplies question and
+evaluation content, not lifecycle authority.
 
-### Context
+## Context
 
-`ContextResolver` is the canonical owner of visible context and context sent to
-the agent.
+- Selection has priority over the current note for automatic turn context.
+- Explicit note/file context is additional readable context.
+- System policy and learning progress are not user-selected context.
+- Supporting context is read-only.
+- The current authorized mutable note is the normal edit target.
 
-Supporting context may be readable. The current mutable note remains the only
-normal mutation target unless the product contract explicitly changes.
-
-### Editing
+## Editing
 
 ```text
 proposal
+→ user review
 → re-read current document
 → exact unique match
-→ user approval
-→ one editor transaction
+→ Apply
+→ one Obsidian editor transaction
 ```
 
-Never silently rebase a stale or ambiguous proposal. Use Obsidian APIs so native
-undo remains available.
+Never silently rebase stale or ambiguous edits.
 
-### Agent runtime
+Use Obsidian editor APIs so native Undo remains available.
 
+## Agent runtime
+
+- Nox is runtime-agnostic above the `AgentAdapter` boundary.
 - Spawn the configured runtime only when needed.
 - Send user-controlled content through structured stdin/input, never shell interpolation.
-- Convert provider output into normalized product events before UI consumption.
-- Capture stderr and surface malformed/failed streams as recoverable product errors.
+- Normalize provider output before product/UI consumption.
+- Capture stderr and convert malformed/failed streams into recoverable product errors.
 - Stop child processes on cancellation, view close, and plugin unload.
-- Provider names and raw protocol details must not leak into normal product UI.
+- Provider names and raw protocol events must not leak into normal product UI.
 
-## 6. UI work
+---
 
-For UI changes, read `DESIGN.md` before editing.
+# 6. Git workflow
 
-`AGENTS.md` does not duplicate the design system. `DESIGN.md` is authoritative
-for visual tokens, density, hierarchy, interaction composition, and acceptance
-criteria.
+Use a lightweight trunk-oriented workflow.
 
-UI code should render state and capture intent. Do not move context resolution,
-practice evaluation, provider parsing, learning-state transitions, note
-mutation rules, or persistence policy into the view.
+## Branches
 
-A visual extraction into more files is not an architecture improvement unless
-responsibility becomes clearer.
+Default: continue on the current working branch.
 
-## 7. Repository and delivery discipline
+Create a dedicated branch only when:
 
-Preserve unrelated work. Before editing an existing working tree, inspect its
-state and never reset, clean, overwrite, or force-push unrelated changes.
+- the change is risky or large enough to need isolation;
+- parallel work is happening;
+- the user explicitly requests a branch or PR;
+- the change cannot reasonably be completed as one coherent working session.
+
+Do not create a branch for every small edit.
+
+If a branch is created:
+
+```text
+branch
+→ complete one coherent task
+→ verify
+→ merge promptly
+→ delete branch
+```
+
+Avoid long-lived feature branches.
+
+## Commits
+
+A commit should represent one coherent completed slice.
+
+Prefer:
+
+```text
+implementation + relevant tests + required docs
+→ one logical commit
+```
+
+Avoid WIP commit spam, unrelated formatting, and feature + cleanup mixtures.
+
+---
+
+# 7. Refactoring rule
+
+Refactor when it reduces concrete risk in the current change.
+
+Good reasons:
+
+- two paths implement the same business rule differently;
+- ownership is ambiguous;
+- dependency direction prevents faithful testing;
+- the current structure creates a known unsafe change path;
+- the change would otherwise add a second source of truth.
+
+Not sufficient by itself:
+
+- a file is large;
+- code is not maximally DRY;
+- a pattern could be introduced;
+- clean-code terminology suggests a different shape.
+
+Do not perform architecture rewrites as incidental cleanup.
+
+---
+
+# 8. Dependency rule
+
+Do not add a dependency until existing platform/runtime capabilities are
+insufficient.
+
+Before adding one, answer:
+
+```text
+what concrete problem does it solve?
+why is current code/platform insufficient?
+what bundle/runtime/maintenance cost does it add?
+```
+
+Prefer established dependencies when they remove meaningful risk. Avoid
+framework duplication.
+
+---
+
+# 9. Obsidian compatibility workflow
+
+For behavior touching Obsidian APIs:
+
+```text
+focused deterministic proof
+→ implement
+→ build
+→ verify native Obsidian boundary when required
+```
+
+Do not replace Obsidian editor behavior with filesystem shortcuts when native
+selection, editor state, or Undo semantics matter.
 
 Generated `dist/` output is not source. Do not edit it manually.
 
-Nox remains runtime-agnostic at the product boundary. The current AGY integration
-is one `AgentAdapter` implementation, not the product architecture.
+Do not deploy to a user's vault unless explicitly requested.
 
-Do not deploy into a user's Obsidian vault unless explicitly requested.
+---
 
-Use lightweight trunk-style development by default:
+# 10. Review before ship
+
+Inspect the final diff, not only test output.
+
+Check:
+
+- does the change satisfy the requested observable behavior?
+- is there one source of truth for each changed rule?
+- did UI, persistence, or adapters acquire business logic?
+- is failure behavior explicit?
+- are practice, context, and edit invariants preserved?
+- are tests protecting the actual risky behavior?
+- did unrelated files change?
+- did the change leave dead or parallel paths?
+- did a product/engineering contract change and need documentation?
+
+Do not keep adding polish once acceptance criteria are satisfied.
+
+---
+
+# 11. Definition of done
+
+A task is done when:
 
 ```text
-small coherent slice
-→ focused verification
-→ full relevant gate
-→ inspect diff
-→ commit / ship
-```
-
-Create extra branches or PR ceremony only when the task, collaboration model, or
-risk benefits from them.
-
-## 8. Definition of done
-
-A slice is done when:
-
-```text
-requested observable behavior works
-+
-changed business rule has one canonical owner
+requested behavior works
 +
 important failure path is handled
 +
-actual risky boundary is verified
+changed rule has one canonical owner
 +
-no unnecessary parallel/dead path remains
+actual regression risk is verified
++
+types/build are healthy for affected scope
++
+dead transition code is removed
++
+canonical docs are updated if contracts changed
 +
 diff contains no unrelated work
-=
-DONE
 ```
 
-Before commit or handoff:
+"More architecture" is not part of done.
 
-1. Re-read the actual diff.
-2. Confirm dependency direction and ownership did not get worse.
-3. Confirm state has one canonical owner.
-4. Run the smallest faithful proofs and the broader gate required by blast radius.
-5. Check generated artifacts only when the change affects them.
-6. Report what changed, what passed, what could not be verified, and what remains out of scope.
+"More tests" is not part of done once the important behavior is protected.
 
-Do not keep polishing after the definition of done is satisfied. Ship the
-smallest high-quality slice and continue from real product feedback.
+Ship when the slice is correct, understandable, and easy to change next.

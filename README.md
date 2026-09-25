@@ -42,13 +42,13 @@ Restart Obsidian after changing environment variables.
 ## Development commands
 
 ```sh
-pnpm run dev              # watch the plugin bundle
-pnpm run typecheck       # TypeScript check
-pnpm run test:unit       # deterministic unit and state tests
-pnpm run test:integration # process, deploy, and boundary tests
-pnpm run build           # production artifacts in dist/
-pnpm run test:artifacts  # verify plugin identity and artifact contents
-pnpm run verify           # complete local verification gate
+pnpm run dev               # watch the plugin bundle
+pnpm run typecheck         # TypeScript check
+pnpm run test:unit         # deterministic unit and state tests
+pnpm run test:integration  # process, deploy, and boundary tests
+pnpm run build             # production artifacts in dist/
+pnpm run test:artifacts    # verify plugin identity and artifact contents
+pnpm run verify            # complete local verification gate
 ```
 
 `dist/` is generated output. Do not edit it directly.
@@ -91,6 +91,8 @@ of mastery; learning progress requires meaningful evidence.
 
 ## Architecture
 
+Current implementation:
+
 ```text
 ChatView
   ↓
@@ -106,8 +108,11 @@ LearningController
       AgyAdapter → AGY CLI
 ```
 
-Provider protocol parsing stays inside `AgyAdapter`. The UI consumes
-normalized learning events and never renders raw provider JSON.
+The canonical target boundaries and incremental migration path live in
+`.agents/ENGINEERING_DESIGN.md`.
+
+Provider protocol parsing stays behind the agent adapter boundary. The UI
+consumes normalized learning events and never renders raw provider JSON.
 
 ## Repository map
 
@@ -119,8 +124,8 @@ src/
 ├── learning/    actions, practice, and learning state
 ├── mutation/    safe Markdown proposal application
 ├── persistence/ durable vault learning state
-├── session/     conversation persistence
-└── settings/   Nox runtime settings
+├── session/     conversation persistence/runtime coordination
+└── settings/    Nox runtime settings
 
 tests/           unit and integration behavior proofs
 public/nox.png   canonical Nox brand asset
@@ -128,13 +133,12 @@ styles.css       Tailwind v4 design token and component entry
 manifest.json    Obsidian plugin metadata
 ```
 
-## Design and engineering guidance
+## Canonical design and engineering context
 
-- `DESIGN.md` is the interface source of truth: compact, calm, technical, and
-  semantic purple used sparingly.
-- `AGENTS.md` defines ownership, workflow, and verification rules.
-- `.agents/product.md` defines the current Nox Learning OS contract.
-- `.agents/testing.md` maps high-risk behavior to the smallest faithful proof.
+- `AGENTS.md` — development workflow and shipping rules.
+- `.agents/PRODUCT_DESIGN.md` — product behavior, flows, states, scope, and acceptance criteria.
+- `DESIGN.md` — detailed UI/visual system.
+- `.agents/ENGINEERING_DESIGN.md` — architecture, boundaries, state ownership, testing, and migration direction.
 
-Keep changes small, preserve clear ownership, and run `pnpm run verify` before
-integration.
+Keep changes small, preserve one owner per rule, verify the actual risky
+boundary, and run the relevant repository gates before shipping.
