@@ -54,8 +54,8 @@ application use case
 
 ## 2. Current architecture and migration direction
 
-Current implementation is already separated into modules, but some
-responsibilities are wider than their names imply.
+Current implementation is already separated into modules, but runtime ownership
+does not yet fully match the folder structure.
 
 Observed current path:
 
@@ -74,17 +74,193 @@ LearningController
        AgentAdapter
 ```
 
-Known boundary drift:
+The current architecture is therefore best described as:
 
-- `LearningController` currently combines turn orchestration, practice
-  coordination, structured-event handling, proposal lifecycle, persistence
-  triggers, cancellation, timeout, and UI event projection.
-- `VaultLearningStore` currently contains both persistence and learning-state
-  transition policy.
-- `SessionController` currently handles conversation persistence and agent
-  execution responsibilities.
-- `ChatView` contains substantial presentation/workflow coordination in
-  addition to rendering.
+```text
+modular files
+≠
+fully separated responsibilities
+```
+
+### 2.1 Architecture health state
+
+| Area | Current state | Target |
+| --- | --- | --- |
+| `ContextResolver` | cohesive | keep as context authority |
+| `StructuredStreamParser` | cohesive and independently testable | keep parser-only |
+| `PracticeStateMachine` | cohesive state machine | keep domain-owned; fix lifetime ownership |
+| `MutationService` | coherent mutation boundary | keep until a concrete split is justified |
+| `main.ts` | correct composition root | keep composition-only |
+| UI primitives/composer/menu | useful mechanical extraction | keep |
+| `VaultLearningStore` | persistence + learning policy | persistence only |
+| `SessionController` | conversation + runtime execution | split responsibilities |
+| `LearningController` | broad orchestration + state/effect ownership | thin facade over application use cases |
+| proposal state | transient Map + persisted session state | one canonical lifecycle owner |
+| practice state | controller-instance lifetime | session-scoped ownership |
+| plugin data writes | multiple read/merge/write paths | one serialized writer |
+| `SessionStore` | exposes mutable stored objects | encapsulated/immutable updates |
+| failure model | transport + application failures mixed | typed product/application failure union |
+| `types.ts` | cross-domain type drawer | types colocated with owning modules |
+| `ChatView` | presentation + workflow coordinator | Obsidian view + presentation composition |
+
+### 2.2 Concrete boundary drift
+
+#### LearningController
+
+`LearningController` currently has too many reasons to change:
+
+```text
+context preparation
+practice coordination
+prompt construction
+stream interpretation
+proposal lifecycle
+learning persistence
+conversation persistence
+timeout / cancellation
+error translation
+UI event projection
+```
+
+This is the main application-layer smell.
+
+The problem is not line count. The problem is mixed ownership and mixed levels
+of abstraction.
+
+#### VaultLearningStore
+
+Current behavior resembles:
+
+```text
+load JSON
+→ create evidence
+→ decide gap transition
+→ update topic
+→ save JSON
+```
+
+Persistence therefore owns learning policy.
+
+Target:
+
+```text
+repository.load()
+→ pure learning-state transition
+→ repository.save(next)
+```
+
+#### SessionController
+
+Current responsibility includes:
+
+```text
+session CRUD
++ plugin persistence
++ model preference
++ model discovery
++ runtime health
++ agent execution
++ conversation ID updates
++ proposal history
+```
+
+Conversation state and runtime execution have different reasons to change and
+must become separate boundaries.
+
+#### Proposal lifecycle
+
+Proposal state currently exists in both:
+
+```text
+LearningController.pendingProposals
++
+ChatSession.messages[].proposalState
+```
+
+This is duplicate canonical state.
+
+Target:
+
+```text
+one Proposal lifecycle
+pending
+├─ applied
+├─ rejected
+└─ stale
+```
+
+#### Practice lifetime
+
+Practice is currently owned by one `LearningController` instance and reset on
+session changes.
+
+Target lifetime:
+
+```text
+conversation/session
+→ practice state
+```
+
+Do not persist it merely for architecture purity; first make its owner explicit.
+Persist only if the product contract requires restart continuity.
+
+#### Plugin data persistence
+
+Settings and session code both perform read/merge/write operations against
+plugin data. Some callers also initiate persistence without awaiting completion.
+
+That creates a correctness risk:
+
+```text
+load snapshot A
+load snapshot B
+→ save A
+→ save B with stale unrelated fields
+```
+
+Target:
+
+```text
+all plugin-data mutations
+→ PluginDataRepository
+→ serialized update
+→ plugin.saveData
+```
+
+This is a correctness boundary, not only a cleanup.
+
+### 2.3 Engineering principles applied
+
+Nox should use principles as decision tools, not as reasons to add layers.
+
+| Principle | Nox interpretation |
+| --- | --- |
+| SRP | one module has one primary reason to change |
+| DIP | application code depends on ports at real I/O boundaries |
+| ISP | ports expose only the operations required by a use case |
+| Encapsulation | repositories do not leak mutable internal state |
+| DRY | one business rule/state owner; syntax duplication is secondary |
+| KISS | no command bus, event bus, DI framework, or repository framework without need |
+| YAGNI | abstractions are introduced only for a current boundary or testability need |
+| Functional core | domain transitions are pure where practical |
+| Imperative shell | Obsidian, process, filesystem, and persistence remain adapters/effects |
+| High cohesion | types, rules, and tests for one concept stay near each other |
+| Low coupling | provider and Obsidian details do not leak into domain code |
+| Explicit state machine | lifecycle transitions are modeled rather than inferred from flags |
+| Single source of truth | one canonical owner for proposal, practice, session, and learning state |
+| Fail explicitly | failure categories preserve where and why an operation failed |
+
+Do not optimize for "Clean Architecture" terminology itself.
+
+The target is:
+
+```text
+clear ownership
++ local reasoning
++ small blast radius
++ faithful tests
++ fast shipping
+```
 
 These are migration targets, not reasons for a rewrite.
 
@@ -740,55 +916,289 @@ Plugin identity changes are migrations, not cosmetic renames.
 
 Do not rewrite the architecture in one pass.
 
-Preferred order:
-
-### Slice 1 — learning-state ownership
+The order is dependency-driven:
 
 ```text
-VaultLearningStore policy
-→ pure learning-state transition
-→ store becomes persistence-focused
+domain ownership
+→ persistence correctness
+→ runtime/application boundaries
+→ canonical state ownership
+→ presentation cleanup
 ```
 
-Preserve current public behavior while moving the rule.
+### NOW — highest-value boundary corrections
 
-### Slice 2 — conversation vs runtime
+#### Slice 1 — learning-state ownership
+
+Move learning policy out of `VaultLearningStore`.
 
 ```text
-SessionController
-→ conversation/session responsibility
-+ runtime responsibility
+current LearningState
++ PracticeEvaluation / ReviewFinding
+→ pure transition
+→ next LearningState
 ```
 
-Separate only at the boundary needed by current callers.
+Then:
 
-### Slice 3 — learning use cases
+```text
+application
+→ repository.load()
+→ transition
+→ repository.save(next)
+```
 
-Keep a compatibility facade:
+Requirements:
+
+- preserve current observable behavior;
+- inject ID/time generation where determinism is needed;
+- move business assertions from store tests into domain tests;
+- keep repository tests focused on serialization and vault I/O.
+
+#### Slice 2 — serialize plugin-data writes
+
+Introduce one plugin-data persistence owner.
+
+```text
+settings mutation
+session mutation
+future plugin metadata
+        ↓
+PluginDataRepository.update(...)
+        ↓
+serialized load / merge / save
+```
+
+Requirements:
+
+- no fire-and-forget persistence for operations whose completion matters;
+- preserve unrelated plugin-data keys;
+- test overlapping updates;
+- keep decoding owned by each domain-specific repository/service.
+
+#### Slice 3 — conversation vs runtime
+
+Split the responsibilities currently combined in `SessionController`.
+
+Target:
+
+```text
+Conversation / Session boundary
+├── create/select/list session
+├── append messages
+├── proposal/session metadata
+└── model preference
+
+AgentRuntime
+├── health
+├── model discovery
+├── execute turn
+└── cancel
+```
+
+Application use cases compose both.
+
+Do not make the conversation boundary aware of provider protocol.
+
+#### Slice 4 — one proposal lifecycle
+
+Remove duplicate ownership between `pendingProposals` and persisted messages.
+
+Target:
+
+```text
+Proposal
+├── id
+├── sessionId
+├── edit payload
+├── mutable target
+└── state
+    ├── pending
+    ├── applied
+    ├── rejected
+    └── stale
+```
+
+`ApplyProposal` becomes the canonical transition path.
+
+### NEXT — application and state ownership
+
+#### Slice 5 — practice session ownership
+
+Make practice state explicitly session-scoped.
+
+First target may remain in memory:
+
+```text
+sessionId
+→ PracticeStateMachine
+```
+
+Persist only when restart continuity is a product requirement.
+
+A session switch must select the correct practice state rather than reset a
+process-global singleton by accident.
+
+#### Slice 6 — extract RunLearningTurn
+
+Keep `LearningController` as a compatibility facade while moving orchestration.
 
 ```text
 ChatView
 → LearningController facade
-   ├── RunLearningTurn
-   ├── ApplyProposal
-   └── ChangeSession
+→ RunLearningTurn
 ```
 
-Move orchestration by behavior slice.
+Target pipeline:
 
-### Slice 4 — proposal ownership
+```text
+LearningRequest
+→ prepareTurn
+→ prepareAction
+→ executeAgent
+→ interpret events
+→ apply domain effects
+→ persist effects
+→ LearningEvent
+```
 
-Remove duplicate canonical state between transient maps and persisted proposal
-history.
+The use case coordinates order. It does not own detailed learning rules.
 
-### Slice 5 — practice session ownership
+#### Slice 7 — separate structured-event interpretation from effects
 
-Make lifecycle ownership explicit and restorable according to product behavior.
+Current `mapStructuredEvents()` is not only a mapper.
 
-### Slice 6 — UI responsibility
+Split conceptually:
 
-Only after application/domain boundaries exist, reduce `ChatView` workflow
-coordination. Do not merely split the file into smaller files.
+```text
+StructuredStreamParser
+→ structured product event
+→ application event handler
+→ domain transition / persistence
+→ LearningEvent
+```
+
+Do not create one class per event unless it provides real value.
+
+Remove duplicated handling between streamed parser output and parser finalization
+through one shared consumption path.
+
+#### Slice 8 — typed failure model
+
+Replace catch-all failure collapsing with explicit categories.
+
+Conceptual model:
+
+```ts
+type NoxFailure =
+  | RuntimeFailure
+  | ContextFailure
+  | ProtocolFailure
+  | PersistenceFailure
+  | MutationFailure
+  | TurnFailure;
+```
+
+Requirements:
+
+- preserve failure origin;
+- keep user-facing copy at the presentation boundary where practical;
+- do not map persistence/domain exceptions to `protocol-invalid`;
+- cancellation and timeout remain explicit terminal outcomes.
+
+### LATER — encapsulation and presentation cleanup
+
+#### Slice 9 — encapsulate session mutation
+
+Do not expose repository-owned mutable objects for callers to mutate in place.
+
+Prefer immutable replacement or explicit mutation operations.
+
+Example:
+
+```text
+appendMessage
+setConversationId
+setModel
+updateProposalState
+```
+
+over:
+
+```text
+getSession()
+→ mutate returned object
+→ remember to updateSession()
+```
+
+#### Slice 10 — colocate shared types
+
+Gradually remove the global `src/types.ts` junk-drawer pattern.
+
+Target locality:
+
+```text
+agent/agent-types.ts
+session/session-types.ts
+mutation/mutation-types.ts
+context/context-types.ts
+domain/.../types.ts
+```
+
+Do not create a new global `types/` directory.
+
+Move a type only when its owner is clear and the current slice already touches it.
+
+#### Slice 11 — reduce ChatView responsibility
+
+Do this only after lower boundaries are stable.
+
+Target:
+
+```text
+ChatView
+├── Obsidian lifecycle
+├── compose presentation objects
+└── bind user actions
+
+TurnPresenter
+→ LearningEvent → presentation state
+
+ThreadRenderer
+→ response / practice / review / proposal / status
+```
+
+Do not split `ChatView` only because it is large.
+
+Extraction is valid when responsibility and testability improve.
+
+#### Slice 12 — strengthen TypeScript checks
+
+After core boundaries are clearer, incrementally enable stronger compiler checks
+such as full `strict` and `noUncheckedIndexedAccess` where the codebase can
+absorb them without mixing a broad mechanical migration into domain refactors.
+
+Treat compiler tightening as a separate coherent slice.
+
+### Slice completion rule
+
+Every migration slice must satisfy:
+
+```text
+same or intentionally updated observable behavior
++
+one ownership problem reduced
++
+no second architecture introduced
++
+focused regression proof
++
+relevant full gate
++
+old/dead path removed
+```
+
+Do not start the next slice merely to make the architecture look complete.
 
 ---
 
@@ -845,7 +1255,44 @@ restart / session switch
 
 Mitigation: one canonical lifecycle owner.
 
-### Risk 4 — provider leakage
+### Risk 4 — plugin-data lost update
+
+Effect:
+
+```text
+two independent load/merge/save operations
+→ stale snapshot wins
+→ unrelated state is overwritten
+```
+
+Mitigation: one serialized plugin-data writer and awaited persistence where
+completion is part of the operation.
+
+### Risk 5 — mutable repository state leakage
+
+Effect:
+
+```text
+caller receives stored object
+→ mutates it directly
+→ repository invariants depend on call order
+```
+
+Mitigation: immutable replacement or explicit repository mutation methods.
+
+### Risk 6 — failure category collapse
+
+Effect:
+
+```text
+persistence / domain / parser / runtime error
+→ generic or protocol-invalid failure
+→ weak diagnostics + wrong recovery behavior
+```
+
+Mitigation: typed failure categories and boundary-specific translation.
+
+### Risk 7 — provider leakage
 
 Effect:
 
@@ -857,7 +1304,33 @@ runtime protocol
 
 Mitigation: normalize at adapter boundary.
 
-### Risk 5 — fake confidence from tests
+### Risk 8 — premature UI decomposition
+
+Effect:
+
+```text
+bad workflow boundaries
+→ split into more files
+→ same coupling becomes harder to trace
+```
+
+Mitigation: clean domain/application ownership before presentation extraction.
+
+### Risk 9 — abstraction inflation
+
+Effect:
+
+```text
+clean-code goal
+→ interfaces/services/factories everywhere
+→ more indirection than behavior
+→ slower change
+```
+
+Mitigation: use DIP only at real I/O/lifecycle boundaries; keep pure/local code
+concrete.
+
+### Risk 10 — fake confidence from tests
 
 Effect:
 
@@ -875,16 +1348,36 @@ Mitigation: prove the actual boundary and retain release-level smoke tests.
 ### Boundaries
 
 - each changed business rule has one owner;
+- each durable/transient state has an explicit owner and lifetime;
 - domain transitions do not depend on Obsidian/provider APIs;
 - persistence does not independently decide learning policy;
 - provider-specific protocol remains below `AgentAdapter`;
-- UI does not recreate learning rules.
+- UI does not recreate learning rules;
+- application use cases coordinate effects without becoming domain rule stores.
+
+### Cohesion and coupling
+
+- a module's public API reflects one primary responsibility;
+- a change in provider protocol does not require domain/UI changes;
+- a storage-format change does not require learning-policy changes;
+- types live near the concept that owns them when practical;
+- interfaces exist at real boundaries, not around every class;
+- no new parallel architecture is introduced during migration.
+
+### State and persistence
+
+- proposal state has one canonical lifecycle owner;
+- practice state belongs to an explicit session lifetime;
+- plugin-data writes cannot silently overwrite unrelated concurrent updates;
+- repositories do not rely on callers mutating returned internal objects;
+- persisted state is decoded defensively and legacy behavior degrades safely.
 
 ### Learning
 
 - learner evidence and material review findings remain semantically distinct;
 - practice rollback preserves the active question;
-- learning-state transitions are independently testable.
+- learning-state transitions are independently testable;
+- learning-state domain rules can be tested without Obsidian vault mocks.
 
 ### Editing
 
@@ -892,11 +1385,22 @@ Mitigation: prove the actual boundary and retain release-level smoke tests.
 - stale/ambiguous replacements fail explicitly;
 - approved edits use the Obsidian editor path and preserve Undo.
 
-### Runtime
+### Runtime and failures
 
 - prompt/context travel through structured input rather than shell interpolation;
 - cancellation terminates process work and restores usable product state;
-- malformed structured output cannot partially mutate durable state.
+- malformed structured output cannot partially mutate durable state;
+- failure categories preserve whether the failure originated in context,
+  protocol, persistence, mutation, runtime, or turn coordination.
+
+### Code quality
+
+- DRY means no duplicated business decision or state owner;
+- small syntax duplication is allowed when abstraction would reduce clarity;
+- large files are refactored only when responsibility/coupling justifies it;
+- pure transitions remain side-effect free;
+- side effects are visible at application/adapter boundaries;
+- dead compatibility paths are removed when migration completes.
 
 ### Testing
 
@@ -910,26 +1414,88 @@ Mitigation: prove the actual boundary and retain release-level smoke tests.
 - no parallel/dead implementation path remains without a compatibility reason;
 - generated artifacts are current when affected;
 - canonical product/engineering docs change with their contracts;
-- final diff contains no unrelated work.
+- final diff contains no unrelated work;
+- a slice stops when its acceptance criteria are satisfied.
 
 ---
 
 ## 26. Final engineering model
 
-The system should be explainable with this graph:
+The target system should be explainable without knowing file-level details:
 
 ```text
-user intent
-→ UI
-→ application use case
-→ domain decision
-→ infrastructure effect
-→ normalized result
-→ UI
+                         ┌──────────────────┐
+                         │     ChatView     │
+                         │ presentation/UI  │
+                         └────────┬─────────┘
+                                  │
+                         commands / queries
+                                  │
+                    ┌─────────────▼─────────────┐
+                    │        Application        │
+                    │                           │
+                    │ RunLearningTurn           │
+                    │ ApplyProposal             │
+                    │ Session use cases         │
+                    └──────┬───────────┬────────┘
+                           │           │
+                     domain rules      │ ports
+                           │           │
+              ┌────────────▼───┐       ▼
+              │     Domain     │   Infrastructure
+              │                │
+              │ learning-state │   VaultLearningStateRepository
+              │ practice       │   PluginSessionRepository
+              │ proposal       │   PluginDataRepository
+              └────────────────┘   ObsidianMutationAdapter
+                                   AgyAdapter
+```
 
-                 domain decision
-                       ↓
-                durable state
+For a practice answer:
+
+```text
+ChatView
+→ RunLearningTurn
+→ PracticeStateMachine
+→ learning-state transition
+→ LearningStateRepository
+→ LearningEvent
+→ presentation
+```
+
+For an edit:
+
+```text
+ChatView
+→ ApplyProposal
+→ proposal lifecycle
+→ MutationPort
+→ Obsidian editor
+→ proposal state transition
+→ presentation
+```
+
+The architecture is healthy when common ownership questions have one obvious
+answer:
+
+```text
+Who decides a gap becomes improving?
+→ learning-state domain
+
+Who stores progress.json?
+→ VaultLearningStateRepository
+
+Who runs the configured agent?
+→ AgentRuntime / AgyAdapter
+
+Who stores conversation history?
+→ session repository
+
+Who decides proposal lifecycle?
+→ proposal application/domain boundary
+
+Who renders a proposal card?
+→ presentation
 ```
 
 The goal is not more layers.
@@ -938,6 +1504,9 @@ The goal is:
 
 ```text
 one rule → one owner
+one state → one lifetime
+pure rule → cheap test
+side effect → explicit boundary
 small slice → small blast radius
 real risk → faithful proof
 clear done → ship
