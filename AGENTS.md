@@ -44,6 +44,7 @@ explicit request.
 | `public/nox.png` | Canonical Nox brand asset used by product surfaces |
 | `styles.css` | Tailwind v4 CSS entry with theme-aware Nox styles |
 | `DESIGN.md` | Nox interface graph, semantic tokens, and design acceptance gates |
+| `.agents/testing.md` | Risk-based test topology, module proofs, and real-Obsidian smoke gate |
 | `dist/` | Generated build artifacts; never edit directly |
 | `scripts/deploy.mjs` | Copies `dist/` into an Obsidian vault |
 
@@ -103,8 +104,8 @@ git diff --stat
 git diff
 ```
 
-Read the relevant source, nearby types, product contract, and existing tests
-before editing. Check the current plugin identity and build path when a change
+Read the relevant source, nearby types, product contract, `.agents/testing.md`,
+and existing tests before editing. Check the current plugin identity and build path when a change
 touches packaging or deployment.
 
 ### Classify
@@ -171,10 +172,15 @@ Run gates sequentially to avoid pnpm workspace-state races:
 
 ```powershell
 pnpm typecheck
+pnpm test:unit
+pnpm test:integration
 pnpm lint
 pnpm build
 git diff --check
 ```
+
+For the normal fast gate, `pnpm verify` runs typecheck, unit tests,
+integration tests, and the production build.
 
 `pnpm build` writes `dist/main.js` and compiles the root `styles.css` entry with
 the local Tailwind v4 CLI into `dist/styles.css`. The root `styles.css` is the
@@ -185,14 +191,22 @@ artifacts directly.
 repository tooling prevents it from running, report the exact baseline error
 instead of treating lint as green.
 
-This repository currently has no test script. Add focused behavioral tests when
-a suitable harness exists; do not create tests only to increase coverage.
+Use behavior-first tests rather than coverage-driven tests:
+
+- Pure transformations use focused unit tests.
+- State transitions test every changed edge, including rollback/failure edges.
+- Boundary changes prove success, failure, and cancellation where applicable.
+- Every bug fix gets a regression test that reproduces the old failure.
+- Obsidian/process/filesystem behavior uses the narrowest faithful integration
+  boundary instead of mocks that merely restate implementation details.
+
+Do not use a global coverage percentage as a merge gate.
 
 Use risk-proportional verification:
 
 | Changed area | Minimum faithful proof |
 | --- | --- |
-| Pure learning rule or parser | Focused unit/regression test |
+| Pure learning rule or parser | Focused unit/regression test; streamed parsers test split boundaries |
 | Context resolution | Selection/current-note behavior proof |
 | Agent stream or process lifecycle | Adapter/process integration proof |
 | Markdown mutation | Stale/ambiguous replacement and editor undo proof |

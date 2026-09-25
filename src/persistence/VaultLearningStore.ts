@@ -6,6 +6,7 @@ import {
 } from "../learning/learning-state";
 import { PracticeEvaluation } from "../learning/practice-types";
 import { ReviewFinding } from "../learning/review-types";
+import { decodeLearningState } from "./learning-state-schema";
 
 const ROOT = "00-learning-os";
 const PROGRESS_PATH = `${ROOT}/progress.json`;
@@ -16,18 +17,6 @@ function cloneDefaultState(): LearningState {
     gaps: [],
     evidence: [],
   };
-}
-
-function isLearningState(value: unknown): value is LearningState {
-  if (!value || typeof value !== "object") return false;
-  const obj = value as Record<string, unknown>;
-
-  return (
-    obj.version === 1 &&
-    (obj.target === null || typeof obj.target === "string") &&
-    Array.isArray(obj.gaps) &&
-    Array.isArray(obj.evidence)
-  );
 }
 
 function normalize(value: string): string {
@@ -58,13 +47,13 @@ export class VaultLearningStore {
       );
     }
 
-    if (!isLearningState(parsed)) {
+    try {
+      return decodeLearningState(parsed);
+    } catch {
       throw new Error(
         `Learning state has an unsupported shape: ${PROGRESS_PATH}`,
       );
     }
-
-    return parsed;
   }
 
   async save(state: LearningState): Promise<void> {
@@ -90,6 +79,7 @@ export class VaultLearningStore {
     const evidence: LearningEvidence = {
       id: crypto.randomUUID(),
       type: "practice",
+      scope: "learner",
       concept: input.evaluation.concept,
       source: input.source,
       outcome: input.evaluation.outcome,
@@ -102,7 +92,8 @@ export class VaultLearningStore {
     for (const misconception of input.evaluation.misconceptions) {
       const existing = state.gaps.find(
         (gap) =>
-          normalize(gap.concept) === normalize(input.evaluation.concept) &&
+          normalize(gap.concept) ===
+            normalize(input.evaluation.concept) &&
           normalize(gap.reason) === normalize(misconception),
       );
 
@@ -134,7 +125,9 @@ export class VaultLearningStore {
         ) {
           // One good answer is evidence of improvement, not proof of mastery.
           gap.status = "improving";
-          gap.evidenceIds.push(evidence.id);
+          if (!gap.evidenceIds.includes(evidence.id)) {
+            gap.evidenceIds.push(evidence.id);
+          }
         }
       }
     }
@@ -154,34 +147,15 @@ export class VaultLearningStore {
       const evidence: LearningEvidence = {
         id: crypto.randomUUID(),
         type: "review",
+        scope: "material",
         concept: finding.concept,
         source: input.source,
         outcome: finding.kind,
         createdAt: Date.now(),
       };
+
       state.evidence.push(evidence);
       state.currentTopic = finding.concept;
-
-      const existing = state.gaps.find(
-        (gap) =>
-          normalize(gap.concept) === normalize(finding.concept) &&
-          normalize(gap.reason) === normalize(finding.detail),
-      );
-
-      if (existing) {
-        if (!existing.evidenceIds.includes(evidence.id)) {
-          existing.evidenceIds.push(evidence.id);
-        }
-        existing.status = "open";
-      } else {
-        state.gaps.push({
-          id: crypto.randomUUID(),
-          concept: finding.concept,
-          reason: finding.detail,
-          evidenceIds: [evidence.id],
-          status: "open",
-        });
-      }
     }
 
     await this.save(state);
@@ -189,7 +163,8 @@ export class VaultLearningStore {
   }
 
   private async ensureRoot(): Promise<void> {
-    const existing = this.app.vault.getAbstractFileByPath(ROOT);
+    const existing =
+      this.app.vault.getAbstractFileByPath(ROOT);
     if (existing) return;
 
     await this.app.vault.createFolder(ROOT);

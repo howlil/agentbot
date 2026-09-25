@@ -21,6 +21,10 @@ import {
 import { ReviewFinding } from "../learning/review-types";
 import { ChatMessage, EditProposal } from "../types";
 import { ProposedEdit } from "../learning/learning-types";
+import {
+  parsePromptToken,
+  PromptMenuKind,
+} from "./prompt-token";
 
 export const NOX_VIEW_TYPE = "nox-sidebar";
 
@@ -54,8 +58,6 @@ const PROMPT_COMMANDS: Array<{
   { kind: "edit", name: "Edit", description: "Improve the current note safely" },
 ];
 
-type PromptMenuKind = "source" | "command";
-
 type PromptMenuAction =
   | { type: "attach" }
   | { type: "info" }
@@ -74,21 +76,6 @@ interface PromptMenuItem {
 function setNoxIcon(element: HTMLElement, icon: IconName): void {
   element.empty();
   setIcon(element, icon);
-}
-
-function parsePromptToken(value: string): {
-  kind: PromptMenuKind;
-  query: string;
-  start: number;
-} | null {
-  const match = /(^|\s)([@/])([\w-]*)$/.exec(value);
-  if (!match) return null;
-
-  return {
-    kind: match[2] === "@" ? "source" : "command",
-    query: match[3].toLowerCase(),
-    start: match.index + match[1].length,
-  };
 }
 
 export class ChatView extends ItemView {

@@ -29,3 +29,59 @@ test("rejects ambiguous replacements", () => {
     { ok: false, reason: "ambiguous" },
   );
 });
+
+test("supports replacements at boundaries and deletion", () => {
+  assert.deepEqual(
+    planReplacement("target rest", "target", "new"),
+    {
+      ok: true,
+      index: 0,
+      next: "new rest",
+    },
+  );
+
+  assert.deepEqual(
+    planReplacement("rest target", "target", ""),
+    {
+      ok: true,
+      index: 5,
+      next: "rest ",
+    },
+  );
+});
+
+test("supports multiline, CRLF, and unicode content", () => {
+  assert.equal(
+    planReplacement(
+      "a\r\n日本語\r\nb",
+      "日本語",
+      "data",
+    ).ok,
+    true,
+  );
+
+  assert.deepEqual(
+    planReplacement(
+      "line one\nline two",
+      "line one\nline two",
+      "merged",
+    ),
+    {
+      ok: true,
+      index: 0,
+      next: "merged",
+    },
+  );
+});
+
+test("empty originals are stale and non-overlapping duplicates are ambiguous", () => {
+  assert.deepEqual(
+    planReplacement("content", "", "x"),
+    { ok: false, reason: "stale" },
+  );
+
+  assert.deepEqual(
+    planReplacement("aaaa", "aa", "x"),
+    { ok: false, reason: "ambiguous" },
+  );
+});

@@ -37,11 +37,35 @@ function escapeAttribute(value: string): string {
 // Each send() still owns one process so cancellation and conversation
 // persistence remain simple at the Nox boundary.
 
+export interface AgyRuntimeDeps {
+  spawn: typeof spawn;
+  existsSync: typeof existsSync;
+  homedir: typeof homedir;
+  platform: NodeJS.Platform;
+  env: NodeJS.ProcessEnv;
+}
+
+const DEFAULT_RUNTIME_DEPS: AgyRuntimeDeps = {
+  spawn,
+  existsSync,
+  homedir,
+  platform: process.platform,
+  env: process.env,
+};
+
 export class AgyAdapter implements AgentAdapter {
+  private readonly deps: AgyRuntimeDeps;
+
   constructor(
     private readonly cwd?: string,
     private readonly getConfig: () => AgentRuntimeConfig = () => ({}),
-  ) {}
+    deps: Partial<AgyRuntimeDeps> = {},
+  ) {
+    this.deps = {
+      ...DEFAULT_RUNTIME_DEPS,
+      ...deps,
+    };
+  }
 
   async check(): Promise<AgentHealth> {
     try {
@@ -59,9 +83,9 @@ export class AgyAdapter implements AgentAdapter {
   private async resolveBinary(): Promise<string> {
     const configured =
       this.getConfig().executablePath?.trim() ||
-      process.env.AGY_PATH?.trim();
+      this.deps.env.AGY_PATH?.trim();
 
-    if (configured && !existsSync(configured)) {
+    if (configured && !this.deps.existsSync(configured)) {
       throw new Error(
         `Configured agent executable does not exist: ${configured}`,
       );
@@ -69,30 +93,30 @@ export class AgyAdapter implements AgentAdapter {
 
     const candidates = [
       configured,
-      ...(process.platform === "win32"
+      ...(this.deps.platform === "win32"
         ? [
-            process.env.LOCALAPPDATA
-              ? join(process.env.LOCALAPPDATA, "agy", "bin", "agy.exe")
+            this.deps.env.LOCALAPPDATA
+              ? join(this.deps.env.LOCALAPPDATA, "agy", "bin", "agy.exe")
               : undefined,
-            process.env.ProgramFiles
+            this.deps.env.ProgramFiles
               ? join(
-                  process.env.ProgramFiles,
+                  this.deps.env.ProgramFiles,
                   "Google",
                   "antigravity-cli",
                   "agy.exe",
                 )
               : undefined,
           ]
-        : [join(homedir(), ".local", "bin", "agy")]),
+        : [join(this.deps.homedir(), ".local", "bin", "agy")]),
     ].filter((value): value is string => Boolean(value));
 
     for (const candidate of candidates) {
-      if (existsSync(candidate)) return candidate;
+      if (this.deps.existsSync(candidate)) return candidate;
     }
 
     return new Promise((resolve, reject) => {
-      const locator = process.platform === "win32" ? "where" : "which";
-      const child = spawn(locator, ["agy"]);
+      const locator = this.deps.platform === "win32" ? "where" : "which";
+      const child = this.deps.spawn(locator, ["agy"]);
       let out = "";
       let settled = false;
 
@@ -145,7 +169,7 @@ export class AgyAdapter implements AgentAdapter {
       return;
     }
 
-    const proc = spawn(bin, this.buildArgs(opts), {
+    const proc = this.deps.spawn(bin, this.buildArgs(opts), {
       cwd: this.cwd,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
@@ -367,7 +391,7 @@ export class AgyAdapter implements AgentAdapter {
     const bin = await this.resolveBinary();
 
     return new Promise((resolve, reject) => {
-      const child = spawn(bin, ["models"], {
+      const child = this.deps.spawn(bin, ["models"], {
         cwd: this.cwd,
         windowsHide: true,
       });
