@@ -1,301 +1,375 @@
-# Nox Development Workflow
+# Nox Engineering Workflow
 
-This repository builds Nox, an Obsidian plugin for a Learning OS. Keep
-changes small, behavior-first, and releasable. Nox is agent-runtime agnostic;
-the current provider integration is an implementation detail behind
-`AgentAdapter`.
+Nox is an Obsidian Learning OS plugin. Develop it as a product, not as a collection
+of files: start from observable behavior, give every rule one owner, change the
+smallest complete slice, verify the boundary that can actually fail, then ship.
 
-The durable product contract lives in `.agents/product.md`. The interface
-states and interaction contract live in `.agents/interaction-spec.md`. This
-file defines how to develop and verify the product.
+The product contract lives in `.agents/product.md`.
+Interaction states live in `.agents/interaction-spec.md`.
+Detailed verification guidance lives in `.agents/testing.md`.
+UI work must follow `DESIGN.md`.
 
-## 1. Working principles
+## 1. Default workflow
 
-Optimize for:
+Use this loop for every non-trivial task:
 
 ```text
-correct behavior
-+ clear ownership
-+ explicit boundaries
-+ maintainable structure
-+ fast feedback
-+ small releasable changes
+UNDERSTAND
+→ MODEL ONLY WHAT MATTERS
+→ IMPLEMENT ONE VERTICAL SLICE
+→ VERIFY ACTUAL RISK
+→ INSPECT DIFF
+→ SHIP
 ```
 
-Prefer the smallest correct change. Do not optimize for abstraction count,
-coverage percentage, ceremony, or speculative scale.
+Do not add ceremony between these steps unless the risk requires it.
 
-Preserve existing dirty work. Inspect the worktree before editing, do not
-overwrite unrelated files, and never reset, clean, or force-push without an
-explicit request.
+### UNDERSTAND
 
-## 2. Repository map
+Before editing, identify:
 
-| Area | Responsibility |
+```text
+observable outcome
+→ caller
+→ responsibility
+→ state / dependency
+→ side effect
+→ consumer
+```
+
+Answer these questions:
+
+- What behavior must change for the user?
+- Who initiates it?
+- Which rule decides the result?
+- What state is read or changed?
+- Which external side effect can happen?
+- Who consumes the result?
+- What is the highest-risk failure?
+- What is the smallest proof that would catch it?
+
+Read only the code and docs needed to answer those questions.
+
+Do not begin with "which files should I refactor?". Begin with behavior.
+
+### MODEL ONLY WHAT MATTERS
+
+For a non-trivial path, reduce it to the smallest useful execution graph:
+
+```text
+input / caller
+→ application responsibility
+→ domain rule
+→ state / dependency
+→ side effect
+→ output / consumer
+```
+
+Every business rule must have exactly one canonical owner.
+
+If the same decision exists in UI, controller, persistence, and adapter code,
+stop expanding it. Pick the correct owner and route callers through it.
+
+Prefer:
+
+```text
+adapter / UI
+→ application use case
+→ domain rule
+→ port
+→ infrastructure adapter
+```
+
+Avoid:
+
+```text
+UI → persistence
+UI → provider protocol
+store → business policy
+adapter → product state transition
+multiple modules independently deciding the same rule
+```
+
+Existing boundary drift may still exist. Do not rewrite unrelated areas merely
+to make the graph ideal. When a task crosses a bad boundary, improve only the
+part required to make that slice safe.
+
+## 2. Ownership
+
+These are the target ownership boundaries. Do not introduce new violations.
+
+| Concern | Canonical owner |
 | --- | --- |
-| `src/main.ts` | Composition root, Obsidian registration, lifecycle |
-| `src/chat/ChatView.ts` | Rendering and capturing user intent only |
-| `src/learning/LearningController.ts` | Learning orchestration and normalized events |
-| `src/context/` | Current note, selection, and policy context |
-| `src/mutation/MutationService.ts` | Validated, user-approved Markdown mutations |
-| `src/persistence/VaultLearningStore.ts` | Durable evidence-backed learning progress |
-| `src/session/` | Conversation and model persistence |
-| `src/agent/AgyAdapter.ts` | Current provider process/protocol adapter behind `AgentAdapter` |
-| `public/nox.png` | Canonical Nox brand asset used by product surfaces |
-| `styles.css` | Tailwind v4 CSS entry with theme-aware Nox styles |
-| `DESIGN.md` | Nox interface graph, semantic tokens, and design acceptance gates |
-| `.agents/testing.md` | Risk-based test topology, module proofs, and real-Obsidian smoke gate |
-| `dist/` | Generated build artifacts; never edit directly |
-| `scripts/deploy.mjs` | Copies `dist/` into an Obsidian vault |
+| Obsidian registration and composition | `src/main.ts` |
+| UI rendering and user intent | chat/UI layer |
+| Learning-turn orchestration | application/learning use case |
+| Practice transition rules | practice domain/state machine |
+| Learning evidence and gap transitions | learning-state domain rules |
+| Visible and agent context | `ContextResolver` |
+| Vault-root learning policy | `PolicyLoader` |
+| Structured agent-output parsing | `StructuredStreamParser` |
+| Provider process/protocol | `AgentAdapter` implementation |
+| Conversation persistence | session/conversation persistence boundary |
+| Learning-state persistence | learning-state repository/store |
+| Markdown replacement validity | mutation logic |
+| Obsidian editor write | Obsidian mutation boundary |
 
-## 3. Ownership boundaries
-
-The dependency direction is:
+Important distinctions:
 
 ```text
-ChatView
-  ↓
-LearningController
-  ├─ ContextResolver
-  ├─ PolicyLoader
-  ├─ VaultLearningStore
-  ├─ MutationService
-  └─ SessionController
-         ↓
-      AgentAdapter
-         ↓
-      provider adapter
-         ↓
-      configured agent runtime
+business rule ≠ persistence rule
+conversation persistence ≠ agent execution
+provider protocol ≠ product event
+UI state ≠ domain state
 ```
 
-- `ChatView` renders state and captures intent. It must not parse provider protocol,
-  resolve context, evaluate practice answers, mutate notes, or persist progress.
-- `LearningController` owns learning actions, state transitions, and normalized
-  learning events.
-- `ContextResolver` is the single source of truth for visible context and
-  context sent to the agent.
-- `PolicyLoader` loads vault-root `AGENTS.md` as Learning OS policy.
-- `VaultLearningStore` persists only meaningful, evidence-backed progress.
-- `MutationService` is the normal path for approved Markdown changes and must
-  reject stale or ambiguous replacements.
-- `SessionController` owns conversation/model persistence only.
-- The provider adapter owns child-process and provider protocol behavior. Upper
-  layers must depend only on `AgentAdapter` and normalized agent events.
+A type such as `Pick<ConcreteClass, ...>` may reduce the visible API, but it does
+not by itself create a real architecture boundary. Prefer explicit ports when a
+dependency genuinely needs inversion; do not create interfaces speculatively.
+
+## 3. Implement one vertical slice
+
+A change should be independently understandable, runnable, and verifiable.
+
+Prefer:
+
+```text
+one observable behavior
+→ minimum ownership correction needed
+→ implementation
+→ focused proof
+→ ship
+```
+
+Do not default to horizontal rewrites such as:
+
+```text
+create all abstractions
+→ move every file
+→ migrate every caller
+→ finally make behavior work
+```
+
+Use compatibility facades when they let a boundary improve incrementally without
+forcing a rewrite.
+
+Keep the public surface small. Reuse the existing canonical path before creating
+another path. When a new implementation supersedes an old one, remove the old
+path unless compatibility is explicitly required.
+
+Do not mix a feature with unrelated cleanup, dependency upgrades, formatting
+sweeps, or speculative architecture work.
+
+### Refactor rule
+
+Refactor when it reduces a concrete risk in the current change:
+
+```text
+current task
+→ duplicated / misplaced rule creates unsafe change
+→ correct that ownership
+→ complete task
+```
+
+File size alone is not a refactor reason.
+
+A large file is a problem when it causes ownership ambiguity, duplicated rules,
+unsafe changes, or verification that is too broad.
 
 Do not introduce RAG, embeddings, background autonomy, multi-agent workflows,
-or provider proliferation before the Learning OS loop is reliable.
+or provider proliferation before the core Learning OS loop requires them.
 
-## 4. Standard development loop
+## 4. Tests and verification
 
-Use this loop for every non-trivial change:
+Verification follows actual risk, not habit.
 
-```text
-inspect → classify → define one slice → implement → verify → inspect diff
-```
+During implementation, run the narrowest faithful proof first.
 
-### Inspect
+| Change | First proof |
+| --- | --- |
+| Pure rule / state transition | focused unit test |
+| Parser behavior | focused parser regression test, including split-stream boundaries |
+| Context precedence | context behavior test |
+| Session or learning persistence | repository/store integration proof |
+| Agent process / cancellation | adapter/process integration proof |
+| Markdown mutation | stale/ambiguous replacement + editor boundary proof |
+| UI behavior | affected flow inspection + typecheck/build |
+| Packaging | generated artifact / target-path inspection |
 
-Start with:
+Use TDD by default for:
 
-```powershell
-git status --short
-git diff --stat
-git diff
-```
+- business rules;
+- state transitions;
+- validation;
+- parser behavior;
+- bug regressions.
 
-Read the relevant source, nearby types, product contract, `.agents/testing.md`,
-and existing tests before editing. Check the current plugin identity and build path when a change
-touches packaging or deployment.
+Do not force TDD for:
 
-### Classify
+- documentation;
+- CSS-only changes;
+- simple wiring;
+- mechanical renames;
+- composition-root edits with no behavior change.
 
-- **Mechanical** — formatting, renames, generated output: make the smallest
-  direct change and run the existing gate.
-- **Local behavior** — validation, transformation, state rule, or bug: add a
-  failing behavioral proof when practical, then implement the minimum fix.
-- **Boundary/state** — persistence, process lifecycle, editor mutation, or
-  external integration: model the contract and verify at the real boundary.
-- **High risk** — authorization, destructive data, concurrency, migrations, or
-  uncertain external effects: state the invariant and use deeper verification.
+Every bug fix should reproduce the old failure before or alongside the fix when
+practical.
 
-### Define one slice
+Do not optimize for coverage percentage. Optimize for proving the changed rule
+and the boundary most likely to fail.
 
-Keep one change independently understandable and verifiable. Do not combine
-feature work with unrelated cleanup, dependency upgrades, or architecture
-refactors. If a refactor is required, make it behavior-preserving and separate
-from the feature when possible.
+### Fast feedback
 
-### Implement
+Use focused tests while iterating.
 
-Keep the public surface small and preserve dependency direction. Remove a
-superseded path instead of leaving old and new implementations active without
-a compatibility reason.
-
-For UI work, preserve native Obsidian behavior, visible context, compact
-density, keyboard access, and clear loading/error/empty states. Do not add
-dashboard-like surfaces or decorative complexity.
-
-Read `DESIGN.md` before changing UI. Use its interface graph, semantic tokens,
-radius/spacing scale, and acceptance test as the default design contract. Keep
-the existing purple `--interactive-accent`; do not introduce hard-coded visual
-tokens, decorative gradients, or unrelated component variants. Treat a
-reference screenshot as a composition reference, not permission to enlarge
-the UI beyond the design system.
-
-### Compact visual contract
-
-Every UI change must remain inside the visual rules in `DESIGN.md`:
-
-- Use `6px / 8px / 10px / 14px / pill` for radii; do not invent larger
-  everyday card or control radii.
-- Use `4px / 6px / 8px / 10px / 12px / 16px / 24px` spacing steps.
-- Keep normal UI at `12–14px`, major headings near `21px`, and controls at
-  approximately `28px` high.
-- Prefer semantic Nox tokens and hairline borders. Purple communicates
-  active AI state, focus, selection, or an intentional primary action.
-- Reject gradients, oversized hero composition, giant controls, broad shadows,
-  decorative badges, and cards without a responsibility boundary.
-- Use `public/nox.png` for Nox brand marks. Do not recreate the logo with
-  text glyphs, unrelated Lucide icons, or a second inline artwork variant.
-- Before finishing, compare the changed surface against the `DESIGN.md`
-  acceptance test and run the UI verification gate.
-
-If a requested visual reference conflicts with these rules, preserve the
-compact Nox system and extract only the reference's hierarchy and interaction
-behavior. If a new interaction or AI state is consequential, update the graph
-and verify that state at the same boundary.
-
-## 5. Verification gates
-
-Run gates sequentially to avoid pnpm workspace-state races:
+Before shipping a meaningful code slice, use the repository gate appropriate to
+its blast radius. The standard full code gate is:
 
 ```powershell
-pnpm typecheck
-pnpm test:unit
-pnpm test:integration
+pnpm verify
 pnpm lint
-pnpm build
 git diff --check
 ```
 
-For the normal fast gate, `pnpm verify` runs typecheck, unit tests,
-integration tests, and the production build.
+`pnpm verify` covers typecheck, unit tests, integration tests, production build,
+and artifact checks according to the repository scripts.
 
-`pnpm build` writes `dist/main.js` and compiles the root `styles.css` entry with
-the local Tailwind v4 CLI into `dist/styles.css`. The root `styles.css` is the
-source asset; `dist/` is the artifact directory. Do not edit generated
-artifacts directly.
+If lint or another baseline tool cannot run because of repository configuration,
+report the exact existing failure. Do not call it green.
 
-`pnpm lint` is required when its ESLint configuration is available. If the
-repository tooling prevents it from running, report the exact baseline error
-instead of treating lint as green.
+Run deeper real-Obsidian/process/filesystem verification only when the changed
+boundary requires it. Follow `.agents/testing.md`.
 
-Use behavior-first tests rather than coverage-driven tests:
+Never treat typecheck or build success as proof of live Obsidian behavior.
 
-- Pure transformations use focused unit tests.
-- State transitions test every changed edge, including rollback/failure edges.
-- Boundary changes prove success, failure, and cancellation where applicable.
-- Every bug fix gets a regression test that reproduces the old failure.
-- Obsidian/process/filesystem behavior uses the narrowest faithful integration
-  boundary instead of mocks that merely restate implementation details.
+## 5. Nox invariants
 
-Do not use a global coverage percentage as a merge gate.
+These rules protect product correctness and override implementation convenience.
 
-Use risk-proportional verification:
-
-| Changed area | Minimum faithful proof |
-| --- | --- |
-| Pure learning rule or parser | Focused unit/regression test; streamed parsers test split boundaries |
-| Context resolution | Selection/current-note behavior proof |
-| Agent stream or process lifecycle | Adapter/process integration proof |
-| Markdown mutation | Stale/ambiguous replacement and editor undo proof |
-| Learning progress | Evidence, gap transition, and persistence proof |
-| UI state or styling | Typecheck/build plus affected flow inspection |
-| Packaging or deployment | Generated artifact and target-path inspection |
-
-Source, typecheck, and build proof do not prove live Obsidian rendering or
-deployment. State those gaps honestly.
-
-## 6. Plugin identity and delivery
-
-The current plugin identity is:
+### Learning evidence
 
 ```text
-package name: nox-obsidian
-view type: nox-sidebar
-artifact: dist/main.js
-styles: dist/styles.css
-deployment target: .obsidian/plugins/nox-obsidian
+interaction
+→ meaningful evidence?
+→ evidence
+→ learning-state transition
+→ persist
 ```
 
-Use:
-
-```powershell
-pnpm build
-pnpm deploy "C:\Path\To\Vault"
-```
-
-Deployment copies the contents of `dist/` and may update the target vault's
-`community-plugins.json`. Do not deploy or modify a user's vault unless the
-user explicitly asks for it. A plugin ID change creates a new Obsidian plugin
-identity; do not silently delete the previous plugin directory or settings.
-
-Nox is the only user-facing product name. Provider names may appear only in
-the adapter implementation, provider-specific diagnostics, and integration
-notes; never in UI labels, product copy, or normalized contracts.
-
-## 7. High-risk invariants
-
-### Learning state
-
-```text
-interaction → meaningful evidence? → evidence → gap/state transition → persist
-```
-
-A normal question is not proof of mastery. Practice evaluation may create
-evidence, but one correct answer must not automatically mark an existing gap as
-mastered.
+A normal question is not mastery evidence. One correct answer must not
+automatically mean mastery unless the domain rule explicitly establishes it.
 
 ### Practice
 
 ```text
-generate question → wait for answer → evaluate → persist evidence
+generate question
+→ wait for answer
+→ evaluate
+→ record evidence
 → next question or complete
 ```
 
-The plugin owns the practice transition. The model generates questions and
-evaluations.
+The plugin owns practice state transitions. The model supplies content and
+evaluation data; it does not own lifecycle state.
+
+### Context
+
+`ContextResolver` is the canonical owner of visible context and context sent to
+the agent.
+
+Supporting context may be readable. The current mutable note remains the only
+normal mutation target unless the product contract explicitly changes.
 
 ### Editing
 
 ```text
-proposal → re-read current document → exact unique match → user approval
+proposal
+→ re-read current document
+→ exact unique match
+→ user approval
 → one editor transaction
 ```
 
-Never silently rebase a stale or ambiguous proposal. Apply through Obsidian
-APIs so native undo remains available.
+Never silently rebase a stale or ambiguous proposal. Use Obsidian APIs so native
+undo remains available.
 
-### Process lifecycle
+### Agent runtime
 
-- Spawn the configured agent runtime only when needed.
-- Pass user content through provider-supported structured stdin/input, never through shell interpolation or oversized argv payloads.
-- Capture stderr and convert malformed or failed streams into recoverable UI
-  errors.
-- Cancel and dispose child processes on stop, view close, and plugin unload.
-- Never expose raw provider protocol events in the UI.
+- Spawn the configured runtime only when needed.
+- Send user-controlled content through structured stdin/input, never shell interpolation.
+- Convert provider output into normalized product events before UI consumption.
+- Capture stderr and surface malformed/failed streams as recoverable product errors.
+- Stop child processes on cancellation, view close, and plugin unload.
+- Provider names and raw protocol details must not leak into normal product UI.
 
-## 8. Final review
+## 6. UI work
 
-Before declaring a slice complete:
+For UI changes, read `DESIGN.md` before editing.
 
-1. Confirm the requested observable behavior works.
-2. Re-read the actual diff, including untracked files relevant to the change.
-3. Check ownership, dependency direction, stale paths, and failure propagation.
-4. Run the smallest relevant gates, then the repository fast gate.
-5. Confirm generated artifacts are current and unrelated dirty work is intact.
-6. Report what changed, what passed, what was not runnable, and what remains out
-   of scope.
+`AGENTS.md` does not duplicate the design system. `DESIGN.md` is authoritative
+for visual tokens, density, hierarchy, interaction composition, and acceptance
+criteria.
 
-Do not commit, push, create branches, or deploy unless explicitly requested.
+UI code should render state and capture intent. Do not move context resolution,
+practice evaluation, provider parsing, learning-state transitions, note
+mutation rules, or persistence policy into the view.
+
+A visual extraction into more files is not an architecture improvement unless
+responsibility becomes clearer.
+
+## 7. Repository and delivery discipline
+
+Preserve unrelated work. Before editing an existing working tree, inspect its
+state and never reset, clean, overwrite, or force-push unrelated changes.
+
+Generated `dist/` output is not source. Do not edit it manually.
+
+Nox remains runtime-agnostic at the product boundary. The current AGY integration
+is one `AgentAdapter` implementation, not the product architecture.
+
+Do not deploy into a user's Obsidian vault unless explicitly requested.
+
+Use lightweight trunk-style development by default:
+
+```text
+small coherent slice
+→ focused verification
+→ full relevant gate
+→ inspect diff
+→ commit / ship
+```
+
+Create extra branches or PR ceremony only when the task, collaboration model, or
+risk benefits from them.
+
+## 8. Definition of done
+
+A slice is done when:
+
+```text
+requested observable behavior works
++
+changed business rule has one canonical owner
++
+important failure path is handled
++
+actual risky boundary is verified
++
+no unnecessary parallel/dead path remains
++
+diff contains no unrelated work
+=
+DONE
+```
+
+Before commit or handoff:
+
+1. Re-read the actual diff.
+2. Confirm dependency direction and ownership did not get worse.
+3. Confirm state has one canonical owner.
+4. Run the smallest faithful proofs and the broader gate required by blast radius.
+5. Check generated artifacts only when the change affects them.
+6. Report what changed, what passed, what could not be verified, and what remains out of scope.
+
+Do not keep polishing after the definition of done is satisfied. Ship the
+smallest high-quality slice and continue from real product feedback.
